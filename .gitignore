@@ -59,6 +59,7 @@ coverage.html
 .Trashes
 ehthumbs.db
 Thumbs.db
+.db
 
 # Docker
 .dockerignore
@@ -66,6 +67,7 @@ Thumbs.db
 # Testing
 /test/tmp/
 /test/out/
+test
 
 # Vue/Vite specific
 .vite/
