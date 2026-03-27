@@ -34,7 +34,6 @@ COPY --from=builder /app/dist /app/dist
 
 # 设置环境变量（保持原有环境变量）
 ENV LISTEN=
-ENV AUTH_USER=
 ENV LOG_PATH=
 ENV DEBUG=
 

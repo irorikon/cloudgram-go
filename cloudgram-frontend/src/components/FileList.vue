@@ -2,7 +2,7 @@
   <div class="file-list" @contextmenu.prevent="handleGlobalContextMenu">
     <n-data-table ref="dataTableRef" :columns="columns" :data="files" :row-key="getRowKey" :bordered="false"
       :loading="loading" size="medium" @update:checked-row-keys="handleSelectionChange"
-      :style="{ height: minHeight }" />
+      :style="{ minHeight: minHeight }" />
   </div>
 
   <!-- 右键菜单 -->

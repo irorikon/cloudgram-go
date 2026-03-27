@@ -375,9 +375,6 @@ const uploadLargeFileWithId = async (file: File, uploadId: string, parentId: str
       if (uploadFileInfo) {
         uploadFileInfo.percentage = Math.min(Math.floor(((chunkIndex + 1) / totalChunks) * 100), 100);
       }
-      if (chunkIndex < totalChunks - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1s间隔
-      }
     }
 
     // 合并文件
