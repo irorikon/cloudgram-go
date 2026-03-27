@@ -15,6 +15,7 @@ export default defineConfig({
       modules: [
         'vue',
         'vue-router',
+        'axios',
         {
           name: 'pinia',
           var: 'Pinia',

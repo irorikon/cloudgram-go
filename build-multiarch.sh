@@ -46,7 +46,7 @@ else
     echo "Building multi-architecture image locally (no push)..."
 fi
 
-docker buildx build "${BUILD_ARGS[@]}"
+docker buildx build "${BUILD_ARGS[@]}" .
 
 if [[ "$PUSH" == "true" ]]; then
     echo "Multi-architecture build completed successfully!"

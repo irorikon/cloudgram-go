@@ -24,9 +24,11 @@ const router = createRouter({
       name: 'login',
       component: () => import('../views/LoginView.vue'),
     },
+    // 404 页面路由 - 放到最后
     {
-      path: '/:path(.*)*',
-      component: HomeView,
+      path: '/:pathMatch(.*)*',
+      name: 'NotFound',
+      component: () => import('../views/NotFoundView.vue')
     }
   ],
 })
