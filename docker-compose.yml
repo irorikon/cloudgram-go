@@ -1,18 +1,21 @@
 services:
   cloudgram-go:
     container_name: cloudgram-go
-    image: irorikon/cloudgram-go:latest
+    image: your-username/cloudgram-go:latest
     restart: unless-stopped
     network_mode: bridge
     ports:
       - "5244:5244"
     environment:
-      - LISTEN=<:5244>
-      - AUTH_USER=<string>
-      - AUTH_PASSWORD=<string>
-      - TELEGRAM_BOT_TOKEN=<string>
-      - DB_TYPE=<mysql|postgres|sqlite>
-      - DB_DSN=<string>
-      - LOG_PATH=<string>
-      - JWT_SECRET_KEY=<string>
-      - DEBUG=<true|false>
+      - LISTEN=:5244
+      - AUTH_USER=your_username
+      - AUTH_PASSWORD=your_password
+      - TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+      - DB_TYPE=sqlite
+      - DB_DSN=
+      - LOG_PATH=/app/logs
+      - JWT_SECRET_KEY=your_jwt_secret_key
+      - DEBUG=false
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs

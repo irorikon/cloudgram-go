@@ -11,11 +11,12 @@ RUN go mod download
 COPY . .
 
 # 安装 git 并构建应用
+# 使用目标架构信息自动适配（多架构构建时由构建平台自动设置）
 RUN apk add --no-cache git && \
     CGO_ENABLED=0 GOOS=linux go build -tags netgo -ldflags "-s -w" -o ./cloudgram-go ./main.go
 
-# 生产阶段
-FROM alpine:latest
+# 生产阶段 - 使用明确支持多架构的 alpine 版本
+FROM alpine:3.18
 
 # 安装 ca-certificates 以支持 HTTPS 请求
 RUN apk --no-cache add ca-certificates tzdata && \
@@ -34,11 +35,6 @@ COPY --from=builder /app/dist /app/dist
 # 设置环境变量（保持原有环境变量）
 ENV LISTEN=
 ENV AUTH_USER=
-ENV AUTH_PASSWORD=
-ENV JWT_SECRET_KEY=
-ENV TELEGRAM_BOT_TOKEN=
-ENV DB_TYPE=
-ENV DB_DSN=
 ENV LOG_PATH=
 ENV DEBUG=
 
@@ -49,10 +45,6 @@ RUN chown -R appuser:appgroup /app && \
 
 # 切换到非 root 用户
 USER appuser
-
-# 健康检查（可选，根据实际端口调整）
-# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-#   CMD wget --quiet --tries=1 --spider http://localhost:5244/health || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD []
