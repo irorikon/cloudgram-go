@@ -6,7 +6,7 @@ type File struct {
 	BaseModel
 	ID       uuid.UUID   `json:"id" gorm:"primaryKey;type:uuid;comment:文件UUID"`
 	Name     string      `json:"name" gorm:"not null;comment:文件名"`
-	ParentID uuid.UUID   `json:"parent_id" gorm:"type:uuid;index;comment:父级ID"`
+	ParentID *uuid.UUID  `json:"parent_id" gorm:"type:uuid;index;comment:父级ID"`
 	IsDir    bool        `json:"is_dir" gorm:"not null;default:false;comment:是否是文件夹"`
 	Size     int64       `json:"size" gorm:"not null;default:0;comment:文件大小"`
 	MimeType string      `json:"mime_type" gorm:"comment:文件类型"`

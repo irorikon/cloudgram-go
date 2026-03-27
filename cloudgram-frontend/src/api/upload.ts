@@ -21,7 +21,7 @@ export async function uploadChunk(uploadId: string, totalChunks: number, chunkIn
     try {
       return await request.upload('upload/chunk', formData, {
         isFormData: true,
-        timeout: 1200000 // 120秒超时
+        timeout: 1200000 // 1200秒超时
       })
     } catch (error) {
       lastError = error;

@@ -18,7 +18,7 @@ func (f *FileApi) GetFileDetail(c *gin.Context) {
 		return
 	}
 
-	fileID, ok := f.parseParentID(c, fileIDStr)
+	fileID, ok := f.parseUUID(c, fileIDStr, "file_id")
 	if !ok {
 		return
 	}
@@ -145,15 +145,22 @@ func (f *FileApi) UpdateFile(c *gin.Context) {
 		return
 	}
 
-	var newParentID uuid.UUID
-	if req.ParentID != "" {
-		parentID, ok := f.parseUUID(c, req.ParentID, "parent_id")
-		if !ok {
-			return
+	var newParentID *uuid.UUID
+	if req.Active == "move" {
+		// 移动操作需要解析父目录ID
+		if req.ParentID != "" {
+			parsedID, ok := f.parseParentID(c, req.ParentID)
+			if !ok {
+				return
+			}
+			newParentID = parsedID
+		} else {
+			// 如果ParentID为空，表示移动到根目录，设置为nil
+			newParentID = nil
 		}
-		newParentID = parentID
-	} else if req.Active == "move" {
-		newParentID = uuid.Nil
+	} else {
+		// 重命名操作不需要ParentID
+		newParentID = nil
 	}
 
 	if req.Active == "rename" && req.NewName == "" {
@@ -241,9 +248,18 @@ func (f *FileApi) parseRequest(c *gin.Context, req *request.FileRequest) bool {
 }
 
 // parseParentID 解析父目录ID
-func (f *FileApi) parseParentID(c *gin.Context, parentIDStr string) (uuid.UUID, bool) {
+func (f *FileApi) parseParentID(c *gin.Context, parentIDStr string) (*uuid.UUID, bool) {
 	if parentIDStr == "" {
-		return uuid.Nil, true
+		// 空字符串表示根目录，返回nil指针
+		return nil, true
 	}
-	return f.parseUUID(c, parentIDStr, "parent_id")
+
+	parsedUUID, err := uuid.Parse(parentIDStr)
+	if err != nil {
+		response.FailWithMessage("invalid parent_id format", c)
+		return nil, false
+	}
+
+	// 返回指针
+	return &parsedUUID, true
 }

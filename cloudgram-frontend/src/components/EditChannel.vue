@@ -1,36 +1,39 @@
 <template>
     <div class="edit-channel-dialog">
-        <!-- 频道列表 -->
-        <div class="channel-list">
-            <div v-for="channel in channels" :key="channel.channel_id" class="channel-item"
-                :class="{ 'channel-item--selected': selectedChannelId === channel.channel_id }"
-                @click="selectChannel(channel.channel_id)">
-                <div class="channel-info">
-                    <span class="channel-name">{{ channel.name }}</span>
-                    <span class="channel-id">{{ channel.channel_id }}</span>
-                </div>
-                <div class="channel-actions">
-                    <n-button size="small" type="error" ghost @click.stop="handleDeleteChannel(channel.channel_id)"
-                        :disabled="deletingChannelId === channel.channel_id">
-                        {{ deletingChannelId === channel.channel_id ? '删除中...' : '删除' }}
-                    </n-button>
-                </div>
-            </div>
+        <!-- 频道表格 -->
+        <n-data-table
+            :columns="columns"
+            :data="channels"
+            :row-key="row => row.channel_id"
+            :bordered="false"
+            size="small"
+            :pagination="false"
+            max-height="300"
+            class="channel-table"
+            :row-props="rowProps"
+            
+        />
 
-            <div v-if="channels.length === 0" class="empty-state">
-                <n-text type="secondary">暂无频道</n-text>
-            </div>
+        <div v-if="channels.length === 0" class="empty-state">
+            <n-text type="secondary">暂无频道</n-text>
         </div>
 
         <!-- 编辑/新增表单 -->
         <div class="channel-form">
-            <n-form :model="form" :rules="rules" ref="formRef">
-                <n-form-item label="频道ID" path="channelId">
+            <n-form 
+                :model="form" 
+                :rules="rules" 
+                ref="formRef"
+                label-placement="top"
+                :label-width="80"
+                class="centered-form"
+            >
+                <n-form-item label="频道ID" path="channelId" class="form-item">
                     <n-input v-model:value="form.channelId" placeholder="请输入频道ID" :disabled="!!editingChannelId"
                         clearable />
                 </n-form-item>
 
-                <n-form-item label="频道名称" path="channelName">
+                <n-form-item label="频道名称" path="channelName" class="form-item">
                     <n-input v-model:value="form.channelName" placeholder="请输入频道名称" clearable />
                 </n-form-item>
             </n-form>
@@ -49,17 +52,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import {
     NButton,
     NInput,
     NForm,
     NFormItem,
     NText,
+    NDataTable,
     useMessage
 } from 'naive-ui'
-import type { FormInst, FormRules } from 'naive-ui'
+import type { FormInst, FormRules, DataTableColumns } from 'naive-ui'
 import { listChannels, createChannel, deleteChannel, updateChannel, checkChannel } from '@/api/channel'
+import type { RowData } from 'naive-ui/es/data-table/src/interface'
 
 // 定义频道类型
 interface ChannelRecord {
@@ -67,8 +72,8 @@ interface ChannelRecord {
     name: string
     limited: boolean
     message_id: number
-    created_at: string
-    updated_at: string
+    CreatedAt: string
+    UpdatedAt: string
 }
 
 const message = useMessage()
@@ -86,6 +91,39 @@ const form = ref({
     channelId: '',
     channelName: ''
 })
+
+// 表格列定义 - 移除固定宽度，让列自适应
+const columns: DataTableColumns<ChannelRecord> = [
+    {
+        title: '频道名称',
+        key: 'name',
+        ellipsis: {
+            tooltip: true
+        }
+    },
+    {
+        title: '频道 ID',
+        key: 'channel_id'
+    },
+    {
+        title: '操作',
+        key: 'actions',
+        render(row) {
+            return h(NButton, {
+                size: 'small',
+                type: 'error',
+                ghost: true,
+                disabled: deletingChannelId.value === row.channel_id,
+                onClick: (e: Event) => {
+                    e.stopPropagation()
+                    handleDeleteChannel(row.channel_id)
+                }
+            }, {
+                default: () => deletingChannelId.value === row.channel_id ? '删除中...' : '删除'
+            })
+        }
+    }
+]
 
 // 表单验证规则
 const rules: FormRules = {
@@ -122,11 +160,6 @@ const isFormValid = computed(() => {
     return !isNaN(numId) && Number.isInteger(numId) && name.length > 0
 })
 
-// 新增计算属性：是否处于编辑模式
-const isEditing = computed(() => {
-    return editingChannelId.value !== null
-})
-
 // 获取频道列表
 const fetchChannels = async () => {
     try {
@@ -146,11 +179,19 @@ const fetchChannels = async () => {
     }
 }
 
+function rowProps(row: RowData) {
+  return {
+    style: 'cursor: pointer;',
+    onClick: () => {
+      selectChannel(row.channel_id)
+    }
+  }
+}
 // 选择频道
 const selectChannel = (channelId: number) => {
     selectedChannelId.value = channelId
     editingChannelId.value = channelId
-
+    console.log('selectChannel', channelId)
     const channel = channels.value.find(c => c.channel_id === channelId)
     if (channel) {
         form.value = {
@@ -178,7 +219,6 @@ const handleSubmit = async () => {
         await formRef.value.validate()
         submitLoading.value = true
 
-        // 将字符串转换为数字
         const channelIdNum = Number(form.value.channelId)
         
         if (isNaN(channelIdNum) || !Number.isInteger(channelIdNum)) {
@@ -186,13 +226,12 @@ const handleSubmit = async () => {
             return
         }
 
-        if (isEditing.value && editingChannelId.value !== null) {
+        if (editingChannelId.value !== null) {
             // 更新逻辑
             await updateChannel(editingChannelId.value, form.value.channelName)
             message.success('频道更新成功')
         } else {
             // 新增频道
-            // 检测频道可用性
             const available = await checkChannel(channelIdNum)
             if (!available.channel_status) {
                 message.error('频道不存在或已关闭')
@@ -202,11 +241,11 @@ const handleSubmit = async () => {
             }
         }
 
-        // 重新获取列表
+        // 重新获取列表并重置表单
         await fetchChannels()
         newChannelMode()
     } catch (error) {
-        message.error(isEditing.value ? '更新频道失败' : '新增频道失败')
+        message.error(editingChannelId.value !== null ? '更新频道失败' : '新增频道失败')
     } finally {
         submitLoading.value = false
     }
@@ -214,7 +253,7 @@ const handleSubmit = async () => {
 
 // 删除频道
 const handleDeleteChannel = async (channelId: number) => {
-    if (confirm('确定要删除该频道吗？')) {
+    if (window.confirm('确定要删除该频道吗？')) {
         try {
             deletingChannelId.value = channelId
             await deleteChannel(channelId)
@@ -247,78 +286,53 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 移除所有可能导致偏移的样式，让内容完全自适应模态框宽度 */
 .edit-channel-dialog {
     width: 100%;
     padding: 0 20px;
     box-sizing: border-box;
 }
 
-.channel-list {
+.channel-table {
+    margin-bottom: 20px;
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    padding: 12px;
-    margin-bottom: 20px;
-    max-height: 300px;
-    overflow-y: auto;
-}
-
-.channel-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-.channel-item:hover {
-    background-color: var(--hover-color);
-}
-
-.channel-item--selected {
-    background-color: var(--primary-color-light);
-    border: 1px solid var(--primary-color);
-}
-
-.channel-info {
-    flex: 1;
-    min-width: 0;
-    /* 确保文本截断生效 */
-}
-
-.channel-name {
-    font-weight: 600;
-    display: block;
-    margin-bottom: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.channel-id {
-    font-size: 12px;
-    color: var(--text-color-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.channel-actions {
-    flex-shrink: 0;
-    margin-left: 12px;
 }
 
 .empty-state {
     text-align: center;
     padding: 24px;
+    margin-bottom: 20px;
 }
 
 .channel-form {
     border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 20px;
+}
+
+/* 表单居中 */
+.centered-form {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.form-item {
+    min-width: 200px;
+    flex: 1;
+}
+
+/* 确保两个输入框宽度完全一致 */
+:deep(.form-item .n-input) {
+    width: 100%;
+}
+
+/* 移除可能导致宽度差异的默认样式 */
+:deep(.n-form-item-blank) {
+    flex: 1;
+    min-width: 0;
 }
 
 .form-actions {
@@ -338,30 +352,24 @@ onMounted(() => {
         padding: 0 16px;
     }
 
-    .channel-list {
-        padding: 8px;
-        margin-bottom: 16px;
-    }
-
-    .channel-item {
-        padding: 10px;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-    }
-
-    .channel-info {
-        order: 2;
-    }
-
-    .channel-actions {
-        order: 1;
-        margin-left: 0;
-        align-self: flex-end;
+    .channel-table {
+        font-size: 14px;
     }
 
     .channel-form {
         padding: 16px;
+    }
+    
+    /* 小屏幕时表单项垂直排列 */
+    .centered-form {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+    }
+    
+    .form-item {
+        min-width: auto;
+        flex: none;
     }
 
     .form-actions {
@@ -375,11 +383,27 @@ onMounted(() => {
     }
 }
 
-/* 大屏幕优化 */
-@media (min-width: 1200px) {
+@media (min-width: 769px) {
     .edit-channel-dialog {
-        /* 在大屏幕上保持适当的内边距，但不设置最大宽度限制 */
         padding: 0 30px;
+    }
+    
+    /* 大屏幕时确保表单不会过宽 */
+    .centered-form {
+        max-width: 600px;
+        margin: 0 auto 20px auto;
+    }
+    
+    /* 确保两个表单项等宽 */
+    .centered-form .form-item {
+        flex: 1;
+    }
+    
+    /* 强制输入框容器等宽 */
+    :deep(.centered-form .n-form-item) {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
     }
 }
 </style>

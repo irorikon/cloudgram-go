@@ -16,17 +16,33 @@ type FileService struct{}
 var FileApp = new(FileService)
 
 // GetFileList 根据 ParentID 获取文件列表
-func (f *FileService) GetFileList(parentID uuid.UUID) ([]*model.File, error) {
+func (f *FileService) GetFileList(parentID *uuid.UUID) ([]*model.File, error) {
 	var files []*model.File
-	query := config.DB.Where("parent_id = ?", parentID)
+	query := config.DB
+
+	// 处理父ID为nil的情况（根目录）
+	if parentID == nil {
+		query = query.Where("parent_id IS NULL")
+	} else {
+		query = query.Where("parent_id = ?", parentID)
+	}
+
 	err := query.Order("is_dir DESC, name ASC").Find(&files).Error
 	return files, err
 }
 
 // GetFoldersByParentId 根据父目录ID获取文件夹列表
-func (f *FileService) GetFoldersByParentId(parentID uuid.UUID) ([]*model.File, error) {
+func (f *FileService) GetFoldersByParentId(parentID *uuid.UUID) ([]*model.File, error) {
 	var folders []*model.File
-	query := config.DB.Where("is_dir = ? AND parent_id = ?", true, parentID)
+	query := config.DB.Where("is_dir = ?", true)
+
+	// 处理父ID为nil的情况（根目录）
+	if parentID == nil {
+		query = query.Where("parent_id IS NULL")
+	} else {
+		query = query.Where("parent_id = ?", parentID)
+	}
+
 	err := query.Order("name ASC").Find(&folders).Error
 	return folders, err
 }
@@ -36,25 +52,23 @@ func (f *FileService) GetFileInfo(fileID uuid.UUID) (*model.File, error) {
 	var file model.File
 	err := config.DB.First(&file, "id = ?", fileID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.New("File not found")
+		return nil, errors.New("file not found")
 	}
 	return &file, err
 }
 
+// GetFileIDRecursively 递归获取文件ID
 // 如果传入的是文件，返回包含该文件ID的切片
 // 如果传入的是目录，返回该目录下所有文件的ID
 func (f *FileService) GetFileIDRecursively(id uuid.UUID) ([]uuid.UUID, error) {
 	query := `
 		WITH RECURSIVE descendants(id, is_dir) AS (
-			-- 基础查询：查找起始节点
 			SELECT id, is_dir FROM files WHERE id = ?
 			UNION ALL
-			-- 递归查询：查找子节点
 			SELECT f.id, f.is_dir FROM files f
 			INNER JOIN descendants d ON f.parent_id = d.id
 		)
-		-- 只返回文件（非目录）
-		SELECT id FROM descendants WHERE is_dir = 0
+		SELECT id FROM descendants WHERE is_dir = false
 	`
 
 	var fileIDs []uuid.UUID
@@ -62,7 +76,7 @@ func (f *FileService) GetFileIDRecursively(id uuid.UUID) ([]uuid.UUID, error) {
 	return fileIDs, err
 }
 
-// GetFileRecursivelyDetailed 递归获取文件详细信息（可选扩展功能）
+// GetFileDetailedRecursively 递归获取文件详细信息
 func (f *FileService) GetFileDetailedRecursively(id uuid.UUID) ([]*model.File, error) {
 	query := `
 		WITH RECURSIVE descendants(id, is_dir) AS (
@@ -73,7 +87,7 @@ func (f *FileService) GetFileDetailedRecursively(id uuid.UUID) ([]*model.File, e
 		)
 		SELECT f.* FROM files f
 		INNER JOIN descendants d ON f.id = d.id
-		WHERE d.is_dir = 0
+		WHERE d.is_dir = false
 	`
 
 	var files []*model.File
@@ -82,9 +96,17 @@ func (f *FileService) GetFileDetailedRecursively(id uuid.UUID) ([]*model.File, e
 }
 
 // GetFileInfoByName 根据文件名和父目录查询文件
-func (f *FileService) GetFileInfoByName(name string, parentID uuid.UUID) (*model.File, error) {
+func (f *FileService) GetFileInfoByName(name string, parentID *uuid.UUID) (*model.File, error) {
 	var file model.File
-	query := config.DB.Where("name = ? AND parent_id = ?", name, parentID)
+	query := config.DB.Where("name = ?", name)
+
+	// 处理父ID为nil的情况
+	if parentID == nil {
+		query = query.Where("parent_id IS NULL")
+	} else {
+		query = query.Where("parent_id = ?", parentID)
+	}
+
 	err := query.First(&file).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -93,7 +115,7 @@ func (f *FileService) GetFileInfoByName(name string, parentID uuid.UUID) (*model
 }
 
 // AddFileInfo 添加文件
-func (f *FileService) AddFileInfo(name, mimeType string, parentID uuid.UUID, isDir bool, size int64) (*model.File, error) {
+func (f *FileService) AddFileInfo(name, mimeType string, parentID *uuid.UUID, isDir bool, size int64) (*model.File, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("invalid file name")
@@ -122,7 +144,7 @@ func (f *FileService) AddFileInfo(name, mimeType string, parentID uuid.UUID, isD
 }
 
 // UpdateFileInfo 更新文件
-func (f *FileService) UpdateFileInfo(fileID uuid.UUID, action, newName string, newParentID uuid.UUID) (*model.File, error) {
+func (f *FileService) UpdateFileInfo(fileID uuid.UUID, action, newName string, newParentID *uuid.UUID) (*model.File, error) {
 	switch action {
 	case "rename":
 		return f.renameFile(fileID, newName)
@@ -143,6 +165,7 @@ func (f *FileService) renameFile(fileID uuid.UUID, newName string) (*model.File,
 		return nil, fmt.Errorf("file not found: %s", fileID.String())
 	}
 
+	// 检查目标位置是否已存在同名文件
 	if exists, _ := f.GetFileInfoByName(newName, file.ParentID); exists != nil {
 		return nil, errors.New("file name already exists")
 	}
@@ -152,8 +175,8 @@ func (f *FileService) renameFile(fileID uuid.UUID, newName string) (*model.File,
 	return f.GetFileInfo(fileID)
 }
 
-// 移动文件
-func (f *FileService) moveFile(fileID, newParentID uuid.UUID) (*model.File, error) {
+// moveFile 移动文件
+func (f *FileService) moveFile(fileID uuid.UUID, newParentID *uuid.UUID) (*model.File, error) {
 	if fileID == uuid.Nil {
 		return nil, errors.New("invalid file id")
 	}
@@ -163,26 +186,21 @@ func (f *FileService) moveFile(fileID, newParentID uuid.UUID) (*model.File, erro
 		return nil, fmt.Errorf("file not found: %s", fileID.String())
 	}
 
-	if newParentID != uuid.Nil {
+	// 检查不能移动到自身
+	if newParentID != nil && *newParentID == fileID {
+		return nil, errors.New("cannot move to self")
+	}
 
-		// 检查不能移动到自身
-		if newParentID == fileID {
-			return nil, errors.New("cannot move to self")
+	// 如果是目录，检查循环依赖（目标目录不是根目录时才检查）
+	if file.IsDir && newParentID != nil {
+		// 检查 newParentID 是否是 fileID 的子孙
+		isDescendant, err := f.isDescendant(fileID, *newParentID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check directory hierarchy: %v", err)
 		}
-
-		// 如果是目录，检查循环依赖（目标目录不是根目录时才检查）
-		if file.IsDir && newParentID != uuid.Nil {
-			// 检查 newParentID 是否是 fileID 的祖先
-			isAncestor, err := f.isAncestor(fileID, newParentID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to check directory hierarchy: %v", err)
-			}
-			if isAncestor {
-				return nil, errors.New("cannot move a directory into its own subdirectory")
-			}
+		if isDescendant {
+			return nil, errors.New("cannot move a directory into its own subdirectory")
 		}
-	} else {
-		newParentID = uuid.Nil
 	}
 
 	// 检查目标目录是否存在同名文件
@@ -191,9 +209,8 @@ func (f *FileService) moveFile(fileID, newParentID uuid.UUID) (*model.File, erro
 	}
 
 	// 更新父目录
-	updateData := map[string]any{"parent_id": newParentID}
 	err = config.DB.Model(&model.File{}).Where("id = ?", fileID).
-		Updates(updateData).Error
+		Update("parent_id", newParentID).Error
 	if err != nil {
 		return nil, err
 	}
@@ -201,26 +218,25 @@ func (f *FileService) moveFile(fileID, newParentID uuid.UUID) (*model.File, erro
 	return f.GetFileInfo(fileID)
 }
 
-// 检查 ancestor 是否是 descendant 的祖先
-func (f *FileService) isAncestor(ancestor, descendant uuid.UUID) (bool, error) {
+// isDescendant 检查 descendant 是否是 ancestor 的子孙
+func (f *FileService) isDescendant(ancestor, descendant uuid.UUID) (bool, error) {
 	if ancestor == uuid.Nil || descendant == uuid.Nil {
 		return false, nil
 	}
 
 	query := `
-        WITH RECURSIVE parents(id, parent_id) AS (
-            -- 从 descendant 开始向上查找
-            SELECT id, parent_id FROM files WHERE id = ?
-            UNION ALL
-            SELECT f.id, f.parent_id FROM files f
-            INNER JOIN parents p ON f.id = p.parent_id
-        )
-        SELECT 1 FROM parents WHERE id = ?
-        LIMIT 1
-    `
+		WITH RECURSIVE children(id) AS (
+			SELECT id FROM files WHERE id = ?
+			UNION ALL
+			SELECT f.id FROM files f
+			INNER JOIN children c ON f.parent_id = c.id
+		)
+		SELECT 1 FROM children WHERE id = ?
+		LIMIT 1
+	`
 
 	var exists bool
-	err := config.DB.Raw(query, descendant, ancestor).Scan(&exists).Error
+	err := config.DB.Raw(query, ancestor, descendant).Scan(&exists).Error
 	return exists, err
 }
 
@@ -259,11 +275,14 @@ func (f *FileService) DeleteFile(fileID uuid.UUID, recursive bool) error {
 			ids = []uuid.UUID{fileID}
 		}
 
+		// 如果没有文件要删除，直接返回
+		if len(ids) == 0 {
+			return nil
+		}
+
 		// 删除分片
-		if len(ids) > 0 {
-			if err := tx.Delete(&model.FileChunk{}, "file_id IN ?", ids).Error; err != nil {
-				return err
-			}
+		if err := tx.Delete(&model.FileChunk{}, "file_id IN ?", ids).Error; err != nil {
+			return err
 		}
 
 		// 删除文件

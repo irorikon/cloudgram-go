@@ -67,6 +67,7 @@ const columns = computed(() => [
     title: '文件名',
     key: 'name',
     align: 'left' as const,
+    // ellipsis: true,
     render: (row: FileItem) => {
       return h('div', {
         class: 'file-item',
@@ -89,7 +90,7 @@ const columns = computed(() => [
   {
     title: '大小',
     key: 'size',
-    width: 110,
+    width: 120,
     align: 'right' as const,
     render: (row: FileItem) => {
       if (row.is_dir) {
@@ -101,7 +102,7 @@ const columns = computed(() => [
   {
     title: '修改时间',
     key: 'updated_at',
-    width: 170,
+    width: 200,
     align: 'right' as const,
     render: (row: FileItem) => formatDate(row.UpdatedAt)
   },

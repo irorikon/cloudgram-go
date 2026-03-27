@@ -75,30 +75,35 @@ func (u *UploadChunkApi) MergeChunks(c *gin.Context) {
 		response.FailWithMessage("Request body must be valid JSON", c)
 		return
 	}
-	var parentID uuid.UUID
+
+	var parentID *uuid.UUID
 	if req.ParentID != "" {
-		var err error
-		parentID, err = uuid.Parse(req.ParentID)
+		parsedID, err := uuid.Parse(req.ParentID)
 		if err != nil {
 			response.FailWithMessage("Invalid parentId format", c)
 			return
 		}
+		parentID = &parsedID
 	} else {
-		parentID = uuid.Nil
+		// 父目录ID为空字符串时，表示根目录，设置为nil
+		parentID = nil
 	}
+
 	totalChunks, err := fileChunkService.GetTotalChunksByUploadID(req.UploadID)
 	if err != nil {
 		response.FailWithMessage("Failed to get total chunks", c)
 		return
 	}
+
 	if totalChunks != int64(req.UploadCount) {
 		response.FailWithMessage("Total chunks mismatch", c)
 		return
 	}
+
 	file, err := fileService.AddFileInfo(
 		req.FileName,
 		req.MimeType,
-		parentID,
+		parentID, // 这里已经是指针类型
 		false,
 		req.Size,
 	)
@@ -112,10 +117,12 @@ func (u *UploadChunkApi) MergeChunks(c *gin.Context) {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
+
 	if _, err := fileChunkService.TransferTempChunksToFile(req.UploadID, file.ID); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
+
 	response.OKWithData(file, c)
 }
 
