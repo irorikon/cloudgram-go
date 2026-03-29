@@ -22,6 +22,9 @@ export function getFileChunks(file_id: string) {
  * @returns Blob 数据
  */
 export function getChunkProxyDownload(telegram_file_id: string) {
-  return request.get<Blob>(`download/chunk/${telegram_file_id}`, {}, { responseType: 'blob' })
+  return request.get<Blob>(`download/chunk/${telegram_file_id}`, {}, {
+    responseType: 'blob',
+    timeout: 1200000,
+  })
 }
 
