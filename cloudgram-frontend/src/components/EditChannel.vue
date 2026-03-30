@@ -1,18 +1,8 @@
 <template>
     <div class="edit-channel-dialog">
         <!-- 频道表格 -->
-        <n-data-table
-            :columns="columns"
-            :data="channels"
-            :row-key="row => row.channel_id"
-            :bordered="false"
-            size="small"
-            :pagination="false"
-            max-height="300"
-            class="channel-table"
-            :row-props="rowProps"
-            
-        />
+        <n-data-table :columns="columns" :data="channels" :row-key="row => row.channel_id" :bordered="false"
+            size="small" :pagination="false" max-height="300" class="channel-table" :row-props="rowProps" />
 
         <div v-if="channels.length === 0" class="empty-state">
             <n-text type="secondary">暂无频道</n-text>
@@ -20,14 +10,8 @@
 
         <!-- 编辑/新增表单 -->
         <div class="channel-form">
-            <n-form 
-                :model="form" 
-                :rules="rules" 
-                ref="formRef"
-                label-placement="top"
-                :label-width="80"
-                class="centered-form"
-            >
+            <n-form :model="form" :rules="rules" ref="formRef" label-placement="top" :label-width="80"
+                class="centered-form">
                 <n-form-item label="频道ID" path="channelId" class="form-item">
                     <n-input v-model:value="form.channelId" placeholder="请输入频道ID" :disabled="!!editingChannelId"
                         clearable />
@@ -60,11 +44,13 @@ import {
     NFormItem,
     NText,
     NDataTable,
-    useMessage
+    useMessage,
+    NIcon
 } from 'naive-ui'
 import type { FormInst, FormRules, DataTableColumns } from 'naive-ui'
 import { listChannels, createChannel, deleteChannel, updateChannel, checkChannel } from '@/api/channel'
 import type { RowData } from 'naive-ui/es/data-table/src/interface'
+import { CheckmarkCircleOutline, CloseCircleOutline } from '@vicons/ionicons5'
 
 // 定义频道类型
 interface ChannelRecord {
@@ -97,13 +83,40 @@ const columns: DataTableColumns<ChannelRecord> = [
     {
         title: '频道名称',
         key: 'name',
-        ellipsis: {
+        ellipsis: {  // 在列级别也可以设置
             tooltip: true
+        },
+        render: (row: ChannelRecord) => {
+            return h('div', {
+                style: {
+                    display: 'flex',
+                    alignItems: 'center',  // 垂直居中
+                    gap: '4px'  // 图标和文字间距
+                }
+            }, [
+                h(NIcon, {
+                    component: getIcon(row.limited),
+                    color: getColor(row.limited),
+                    size: '1.5rem'
+                }),
+                h('span', {
+                    style: {
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flex: 1,
+                        minWidth: 0
+                    }
+                }, row.name)
+            ]);
         }
     },
     {
         title: '频道 ID',
-        key: 'channel_id'
+        key: 'channel_id',
+        ellipsis: {  // 在列级别也可以设置
+            tooltip: true
+        },
     },
     {
         title: '操作',
@@ -125,13 +138,22 @@ const columns: DataTableColumns<ChannelRecord> = [
     }
 ]
 
+const getIcon = (limited: boolean) => {
+    console.log('getIcon', limited)
+    return limited ? CloseCircleOutline : CheckmarkCircleOutline
+}
+
+const getColor = (limited: boolean) => {
+    return limited ? 'red' : 'green'
+}
+
 // 表单验证规则
 const rules: FormRules = {
     channelId: [
-        { 
-            required: true, 
-            message: '请输入频道ID', 
-            trigger: 'blur' 
+        {
+            required: true,
+            message: '请输入频道ID',
+            trigger: 'blur'
         },
         {
             validator: (rule, value) => {
@@ -153,9 +175,9 @@ const rules: FormRules = {
 const isFormValid = computed(() => {
     const id = form.value.channelId.trim()
     const name = form.value.channelName.trim()
-    
+
     if (!id || !name) return false
-    
+
     const numId = Number(id)
     return !isNaN(numId) && Number.isInteger(numId) && name.length > 0
 })
@@ -180,12 +202,12 @@ const fetchChannels = async () => {
 }
 
 function rowProps(row: RowData) {
-  return {
-    style: 'cursor: pointer;',
-    onClick: () => {
-      selectChannel(row.channel_id)
+    return {
+        style: 'cursor: pointer;',
+        onClick: () => {
+            selectChannel(row.channel_id)
+        }
     }
-  }
 }
 // 选择频道
 const selectChannel = (channelId: number) => {
@@ -220,7 +242,7 @@ const handleSubmit = async () => {
         submitLoading.value = true
 
         const channelIdNum = Number(form.value.channelId)
-        
+
         if (isNaN(channelIdNum) || !Number.isInteger(channelIdNum)) {
             message.error('频道ID格式不正确，必须是整数')
             return
@@ -359,14 +381,14 @@ onMounted(() => {
     .channel-form {
         padding: 16px;
     }
-    
+
     /* 小屏幕时表单项垂直排列 */
     .centered-form {
         flex-direction: column;
         align-items: stretch;
         gap: 16px;
     }
-    
+
     .form-item {
         min-width: auto;
         flex: none;
@@ -387,18 +409,18 @@ onMounted(() => {
     .edit-channel-dialog {
         padding: 0 30px;
     }
-    
+
     /* 大屏幕时确保表单不会过宽 */
     .centered-form {
         max-width: 600px;
         margin: 0 auto 20px auto;
     }
-    
+
     /* 确保两个表单项等宽 */
     .centered-form .form-item {
         flex: 1;
     }
-    
+
     /* 强制输入框容器等宽 */
     :deep(.centered-form .n-form-item) {
         display: flex;

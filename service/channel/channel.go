@@ -87,10 +87,9 @@ func (cs *ChannelService) UpdateTGChannelName(channelId int64, channelName strin
 
 // FindTGChannels 查询频道
 func (cs *ChannelService) FindTGChannels(one, limited bool) (any, error) {
-	db := config.DB.Where("limited = ?", limited)
-
 	if one {
 		var channel model.Channel
+		db := config.DB.Where("limited = ?", limited)
 		err := db.First(&channel).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -99,6 +98,6 @@ func (cs *ChannelService) FindTGChannels(one, limited bool) (any, error) {
 	}
 
 	var channels []model.Channel
-	err := db.Find(&channels).Error
+	err := config.DB.Find(&channels).Error
 	return channels, err
 }

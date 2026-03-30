@@ -12,7 +12,7 @@ import (
 
 type ChannelApi struct{}
 
-// 获取所有可用的 Telegram Channel 列表
+// 获取所有 Telegram Channel 列表
 func (ch *ChannelApi) ListChannel(c *gin.Context) {
 	channelList, err := channelService.FindTGChannels(false, false)
 	if err != nil {
