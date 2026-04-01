@@ -11,8 +11,6 @@ import (
 	"github.com/irorikon/cloudgram-go/logger"
 )
 
-const Version = "1.0.0"
-
 func init() {
 	flag.StringVar(&config.Listen, "listen", ":5244", "Listen address")
 	flag.StringVar(&config.Listen, "L", ":5244", "Listen address")
@@ -60,7 +58,7 @@ func main() {
 
 	// 打印版本信息并退出
 	if config.PrintVersion {
-		fmt.Printf("cloudgram-go version %s\n", Version)
+		fmt.Printf("cloudgram-go version %s\n", config.Version)
 		os.Exit(0)
 	}
 
