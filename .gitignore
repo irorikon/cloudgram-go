@@ -19,6 +19,7 @@ out/
 .next/
 .nuxt/
 .cache/
+*.out
 
 # Go binaries and build artifacts
 bin/

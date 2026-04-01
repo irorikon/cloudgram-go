@@ -35,6 +35,8 @@ docker buildx inspect --bootstrap
 BUILD_ARGS=(
   --platform "$PLATFORMS"
   --tag "$IMAGE_NAME:$TAG"
+  --cache-from "type=registry,ref=$IMAGE_NAME:buildcache"  # 从远程缓存读取
+  --cache-to "type=registry,ref=$IMAGE_NAME:buildcache,mode=max"  # 写入远程缓存
 )
 
 # 根据 PUSH 参数决定是否添加 --push 标志
