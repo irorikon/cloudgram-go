@@ -22,7 +22,7 @@ var (
 	LogPath      string
 	JwtSecretKey string
 
-	Version string = "1.0.2"
+	Version string = "1.0.3"
 )
 
 // 全局参数配置

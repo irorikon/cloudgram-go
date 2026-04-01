@@ -95,6 +95,7 @@ func (f *FileApi) FileExists(c *gin.Context) {
 	}
 	response.OKWithData(gin.H{
 		"exists": existingFile != nil,
+		"file":   existingFile,
 	}, c)
 }
 

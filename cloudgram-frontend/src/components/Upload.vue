@@ -107,6 +107,12 @@ const folderCache = ref<FolderInfo[]>([]);
 // 正在创建文件夹的 Promise 缓存，避免重复创建
 const creatingFolders = new Map<string, Promise<FolderInfo>>();
 
+// 上传模式
+const uploadMode = ref<boolean>(false); // false: 文件上传 true: 文件夹上传
+
+// 使用 Set 记录已创建的第一层目录
+const createdFirstLevelFolders = new Set<string>();
+
 // 计算剩余文件数量和下一个文件名
 const remainingFilesCount = computed(() => {
   const uploadingIndex = fileListRef.value.findIndex(file => file.status === 'uploading');
@@ -127,7 +133,6 @@ const isUploading = ref(false);
 
 // 解析文件路径，提取文件夹信息
 const parseFilePath = (uploadFileInfo: UploadFileInfo): ParseFilePathResult => {
-  console.log('uploadFileInfo', uploadFileInfo);
   // 优先使用 fullPath（如果存在）
   if (uploadFileInfo.fullPath && uploadFileInfo.fullPath.includes('/')) {
     const path = uploadFileInfo.fullPath;
@@ -213,10 +218,10 @@ const findOrCreateFolder = async (folderName: string, parentId: string): Promise
       // 首先检查文件夹是否已存在
       const existsResponse = await exists(folderName, parentId);
 
-      if (existsResponse.exists && existsResponse.data) {
+      if (existsResponse.exists && existsResponse.file) {
         // 文件夹已存在，从响应中获取ID
         const folderInfo: FolderInfo = {
-          id: existsResponse.data.id,
+          id: existsResponse.file.id,
           name: folderName,
           parentId,
           isDir: true
@@ -260,6 +265,8 @@ const createNestedFolders = async (folderPath: string, baseParentId: string): Pr
   let lastFolder: FolderInfo | null = null;
 
   for (const segment of pathSegments) {
+    // 生成第一层目录的唯一标识
+    const firstLevelKey = `${baseParentId}/${segment}`;
     // 查找当前层级的文件夹
     const existingFolder = findFolderInCache(segment, currentParentId);
 
@@ -271,9 +278,12 @@ const createNestedFolders = async (folderPath: string, baseParentId: string): Pr
       const newFolder = await findOrCreateFolder(segment, currentParentId);
       lastFolder = newFolder;
       currentParentId = newFolder.id;
-      if (pathSegments.indexOf(segment) === 0) {
+      // 只有在创建第一层目录且尚未创建过时才刷新
+      if (pathSegments.indexOf(segment) === 0 && !createdFirstLevelFolders.has(firstLevelKey)) {
+        createdFirstLevelFolders.add(firstLevelKey);
+        console.log(`Created folder: ${newFolder.name}`);
         emit('refresh-filelist');
-      };
+      }
     }
   }
 
@@ -382,18 +392,21 @@ const processUploadQueue = async () => {
     // 获取目标文件夹ID
     let targetFolderId: string;
     if (folderPath) {
+      // 更新上传模式为文件夹上传
+      uploadMode.value = true;
       // 有文件夹路径，递归创建文件夹
       try {
         targetFolderId = await createNestedFolders(folderPath, baseParentId);
         // 更新文件名为实际的文件名（去掉路径）
         targetFile.name = fileName;
         file.name = fileName;
-        message.success(`已创建文件夹结构: ${folderPath}`);
       } catch (error) {
         console.error('创建文件夹失败，将使用父目录上传:', error);
         targetFolderId = baseParentId;
       }
     } else {
+      // 更新上传模式为文件上传
+      uploadMode.value = false;
       // 无文件夹路径，使用当前父目录
       targetFolderId = baseParentId;
     }
@@ -622,7 +635,9 @@ const uploadLargeFileWithId = async (
 // 处理上传完成
 const handleUploadFinish = () => {
   // 上传完成后可以触发文件列表刷新等操作
-  emit('refresh-filelist');
+  if (!uploadMode.value) {
+    emit('refresh-filelist');
+  }
 };
 
 // 处理关闭按钮点击（原取消按钮）
