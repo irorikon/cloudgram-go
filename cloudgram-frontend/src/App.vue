@@ -15,7 +15,7 @@
   </n-config-provider>
 </template>
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import { RouterView } from 'vue-router'
 import {
   NMessageProvider,
@@ -25,7 +25,7 @@ import {
   NConfigProvider,
   NGlobalStyle,
   darkTheme,
-  useMessage
+  useOsTheme
 } from 'naive-ui';
 import { useThemeStore } from '@/store/theme';
 
@@ -41,22 +41,39 @@ const themeOverrides = {
 // 获取主题store实例
 const themeStore = useThemeStore();
 
-// 监听store变化并更新当前主题
-watch(() => themeStore.isDark, (isDark) => {
+// 使用 NaiveUI 提供的 useOsTheme 获取系统主题
+const osTheme = useOsTheme();
+
+// 计算当前主题，优先使用用户设置，如果没有用户设置则使用系统主题
+const computedIsDark = computed(() => {
+  if (themeStore.userDefined) {
+    return themeStore.isDark;
+  }
+  return osTheme.value === 'dark';
+});
+
+// 监听计算后的主题值并更新当前主题
+watch(computedIsDark, (isDark) => {
   currentTheme.value = isDark ? darkTheme : null;
+  // 如果需要，也可以同步到 store
+  themeStore.isDark = isDark;
 }, { immediate: true });
 
-// 检测系统主题偏好
-const detectSystemTheme = () => {
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-};
+// 监听系统主题变化，如果用户没有自定义主题，则跟随系统主题变化
+watch(osTheme, (newOsTheme) => {
+  if (!themeStore.userDefined) {
+    const isDark = newOsTheme === 'dark';
+    currentTheme.value = isDark ? darkTheme : null;
+    themeStore.isDark = isDark;
+  }
+});
 
 // 初始化主题逻辑
 const initializeTheme = () => {
   if (!themeStore.userDefined) {
-    const isSystemDark = detectSystemTheme();
-    if (isSystemDark !== themeStore.isDark) {
-      themeStore.isDark = isSystemDark;
+    const isDark = osTheme.value === 'dark';
+    if (isDark !== themeStore.isDark) {
+      themeStore.isDark = isDark;
     }
   }
 };

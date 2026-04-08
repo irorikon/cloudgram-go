@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed, onUnmounted, reactive } from 'vue';
 import { NUpload, NUploadDragger, NIcon, NText, NP, NButton, useMessage, NProgress } from 'naive-ui';
 // 保留必要的类型导入
 import type { UploadFileInfo, UploadCustomRequestOptions } from 'naive-ui';
@@ -73,6 +73,16 @@ interface ParseFilePathResult {
   folderNames: string[];
   isInFolder: boolean;
   originalFile: File | null;
+}
+
+interface UploadQueueItem {
+  id: string;
+  fileInfo: UploadFileInfo;
+  options: UploadCustomRequestOptions;
+  folderPath?: string | null;
+  targetFileName?: string;
+  targetFolderId?: string;
+  processed: boolean;
 }
 
 const emit = defineEmits<Emits>();
@@ -113,23 +123,26 @@ const uploadMode = ref<boolean>(false); // false: 文件上传 true: 文件夹�
 // 使用 Set 记录已创建的第一层目录
 const createdFirstLevelFolders = new Set<string>();
 
+// 上传队列和相关状态
+const uploadQueue = reactive<{
+  items: UploadQueueItem[];
+  processing: boolean;
+}>({
+  items: [],
+  processing: false
+});
+
 // 计算剩余文件数量和下一个文件名
 const remainingFilesCount = computed(() => {
-  const uploadingIndex = fileListRef.value.findIndex(file => file.status === 'uploading');
-  if (uploadingIndex === -1) return 0;
-  return fileListRef.value.length - uploadingIndex - 1;
+  if (!uploadQueue.processing || uploadQueue.items.length === 0) return 0;
+  return uploadQueue.items.length - 1; // 当前正在上传的已经在队列中
 });
 
 const nextFileName = computed(() => {
-  const uploadingIndex = fileListRef.value.findIndex(file => file.status === 'uploading');
-  if (uploadingIndex === -1 || uploadingIndex + 1 >= fileListRef.value.length) return '';
-  const nextFile = fileListRef.value[uploadingIndex + 1];
-  return nextFile ? nextFile.name : '';
+  if (!uploadQueue.processing || uploadQueue.items.length <= 1) return '';
+  const nextItem = uploadQueue.items[1]; // 队列中的下一个文件
+  return nextItem?.targetFileName || nextItem?.fileInfo.name || '';
 });
-
-// 串行上传相关状态
-const uploadQueue = ref<UploadCustomRequestOptions[]>([]);
-const isUploading = ref(false);
 
 // 解析文件路径，提取文件夹信息
 const parseFilePath = (uploadFileInfo: UploadFileInfo): ParseFilePathResult => {
@@ -138,7 +151,7 @@ const parseFilePath = (uploadFileInfo: UploadFileInfo): ParseFilePathResult => {
     const path = uploadFileInfo.fullPath;
     const segments = path.split('/');
     const fileName = segments.pop() || uploadFileInfo.name;
-    const folderPath = segments.join('/');
+    const folderPath = segments.length > 0 ? segments.join('/') : null;
 
     return {
       fileName,
@@ -154,7 +167,7 @@ const parseFilePath = (uploadFileInfo: UploadFileInfo): ParseFilePathResult => {
     const path = uploadFileInfo.file.webkitRelativePath;
     const segments = path.split('/');
     const fileName = segments.pop() || uploadFileInfo.name;
-    const folderPath = segments.join('/');
+    const folderPath = segments.length > 0 ? segments.join('/') : null;
 
     return {
       fileName,
@@ -169,11 +182,11 @@ const parseFilePath = (uploadFileInfo: UploadFileInfo): ParseFilePathResult => {
   if (uploadFileInfo.name.includes('/')) {
     const segments = uploadFileInfo.name.split('/');
     const fileName = segments.pop() || uploadFileInfo.name;
-    const folderPath = segments.join('/');
+    const folderPath = segments.length > 0 ? segments.join('/') : null;
 
     return {
       fileName,
-      folderPath: folderPath || null,
+      folderPath,
       folderNames: segments,
       isInFolder: segments.length > 0,
       originalFile: uploadFileInfo.file || null
@@ -245,7 +258,8 @@ const findOrCreateFolder = async (folderName: string, parentId: string): Promise
       return folderInfo;
     } catch (error) {
       creatingFolders.delete(cacheKey);
-      message.error(`创建文件夹 "${folderName}" 失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error(`创建文件夹 "${folderName}" 失败: ${errorMessage}`);
       throw error;
     }
   })();
@@ -281,7 +295,6 @@ const createNestedFolders = async (folderPath: string, baseParentId: string): Pr
       // 只有在创建第一层目录且尚未创建过时才刷新
       if (pathSegments.indexOf(segment) === 0 && !createdFirstLevelFolders.has(firstLevelKey)) {
         createdFirstLevelFolders.add(firstLevelKey);
-        console.log(`Created folder: ${newFolder.name}`);
         emit('refresh-filelist');
       }
     }
@@ -292,185 +305,227 @@ const createNestedFolders = async (folderPath: string, baseParentId: string): Pr
 
 // 处理文件变化事件
 const handleFileChange = (data: { file: UploadFileInfo; fileList: UploadFileInfo[] }) => {
-  // 创建新的文件列表，确保每个文件都有正确的状态
-  const newFileList: UploadFileInfo[] = data.fileList.map(newFile => {
-    // 查找已存在的文件状态
-    const existingFile = fileListRef.value.find(f => f.id === newFile.id);
-    if (existingFile && (existingFile.status === 'uploading' || existingFile.status === 'finished' || existingFile.status === 'error')) {
-      // 如果文件正在上传或已完成，保留现有状态
-      return existingFile;
-    }
-    // 新文件或 pending 状态的文件
-    return {
-      ...newFile,
-      status: 'pending',
-      percentage: 0
-    };
-  });
-  // 更新文件列表
-  fileListRef.value = newFileList;
-
-  // 更新当前正在上传的文件
-  const uploadingFile = fileListRef.value.find(file => file.status === 'uploading');
-  currentUploadingFile.value = uploadingFile || null;
+  // 简化处理，只更新文件列表，不进行复杂操作
+  fileListRef.value = data.fileList;
 };
 
-// 自定义上传请求处理 - 修改为串行上传
-const handleCustomRequest = async (options: UploadCustomRequestOptions) => {
-  // 将上传任务添加到队列
-  uploadQueue.value.push(options);
+// 处理文件预处理（解析路径、创建文件夹等）
+// 递归创建文件夹（无论是否存在）
+const createFoldersRecursively = async (folderPath: string, baseParentId: string): Promise<string> => {
+  if (!folderPath) {
+    return baseParentId;
+  }
 
-  // 如果没有正在上传，则开始处理队列
-  if (!isUploading.value) {
-    processUploadQueue();
+  const pathSegments = folderPath.split('/').filter(Boolean);
+  let currentParentId = baseParentId;
+
+  for (const segment of pathSegments) {    
+    // 生成当前层级的唯一标识
+    const folderKey = `${currentParentId}/${segment}`;
+    
+    // 查找当前层级的文件夹
+    const existingFolder = findFolderInCache(segment, currentParentId);
+    
+    if (existingFolder) {
+      currentParentId = existingFolder.id;
+    } else {
+      try {
+        // 检查文件夹是否已存在
+        const existsResponse = await exists(segment, currentParentId);
+        
+        if (existsResponse.exists && existsResponse.file) {
+          // 文件夹已存在，缓存它
+          const folderInfo: FolderInfo = {
+            id: existsResponse.file.id,
+            name: segment,
+            parentId: currentParentId,
+            isDir: true
+          };
+          folderCache.value.push(folderInfo);
+          currentParentId = existsResponse.file.id;
+        } else {
+          // 创建文件夹
+          const newFolder = await findOrCreateFolder(segment, currentParentId);
+          currentParentId = newFolder.id;
+          
+          // 记录已创建的第一层目录
+          if (pathSegments.indexOf(segment) === 0 && !createdFirstLevelFolders.has(folderKey)) {
+            createdFirstLevelFolders.add(folderKey);
+            emit('refresh-filelist');
+          }
+        }
+      } catch (error) {
+        console.error(`创建文件夹 "${segment}" 失败:`, error);
+        // 继续尝试创建其他文件夹
+        break;
+      }
+    }
+  }
+
+  return currentParentId;
+};
+
+// 修改 preprocessFile 函数
+const preprocessFile = async (queueItem: UploadQueueItem): Promise<boolean> => {
+  const { fileInfo, options } = queueItem;
+  const { file, onFinish, onError } = options;
+  
+  if (!file.file) {
+    onError();
+    return false;
+  }
+  
+  try {
+    // 解析文件路径
+    const { fileName, folderPath, originalFile } = parseFilePath(fileInfo);
+    
+    if (!originalFile) {
+      throw new Error('文件不存在');
+    }
+    
+    // 获取基础父目录ID
+    const baseParentId = breadcrumbStore.lastCrumbTypeDir()?.id || '';
+    
+    // 获取目标文件夹ID
+    let targetFolderId: string = baseParentId;
+    if (folderPath) {
+      uploadMode.value = true;
+      // 无论文件夹是否已存在，都递归创建所有需要的文件夹
+      targetFolderId = await createFoldersRecursively(folderPath, baseParentId);
+      queueItem.targetFileName = fileName;
+      fileInfo.name = fileName;
+      file.name = fileName;
+    } else {
+      uploadMode.value = false;
+    }
+    
+    // 检查文件是否已存在
+    const fileExistsResponse = await exists(fileName, targetFolderId);
+    if (fileExistsResponse.exists) {
+      // 文件已存在，跳过上传
+      fileInfo.status = 'finished';
+      fileInfo.percentage = 100;
+      message.warning(`文件 "${fileName}" 已存在，跳过上传`);
+      onFinish();
+      return false;
+    }
+    
+    // 存储预处理结果
+    queueItem.folderPath = folderPath;
+    queueItem.targetFileName = fileName;
+    queueItem.targetFolderId = targetFolderId;
+    queueItem.processed = true;
+    
+    return true;
+  } catch (error) {
+    console.error('文件预处理失败:', error);
+    fileInfo.status = 'error';
+    onError();
+    return false;
   }
 };
 
 // 处理上传队列
 const processUploadQueue = async () => {
-  if (uploadQueue.value.length === 0 || isUploading.value) {
+  if (uploadQueue.processing || uploadQueue.items.length === 0) {
     return;
   }
 
-  isUploading.value = true;
-  const options = uploadQueue.value.shift()!;
+  uploadQueue.processing = true;
+
+  // 只处理队列中的第一个文件
+  const queueItem = uploadQueue.items[0];
+  if (!queueItem) {
+    uploadQueue.processing = false;
+    return;
+  }
+
+  const { fileInfo, options } = queueItem;
   const { file, onFinish, onError } = options;
 
-  if (!file.file) {
-    onError();
-    isUploading.value = false;
-    // 继续处理下一个文件
-    await processUploadQueue();
-    return;
-  }
+  // 更新当前正在上传的文件
+  currentUploadingFile.value = fileInfo;
+  fileInfo.status = 'uploading';
+  fileInfo.percentage = 0;
 
   try {
-    // 找到 fileListRef 中对应的文件对象
-    const existingFileIndex = fileListRef.value.findIndex(f => f.id === file.id);
-    let targetFile: UploadFileInfo;
-
-    if (existingFileIndex !== -1) {
-      const foundFile = fileListRef.value[existingFileIndex];
-      if (foundFile) {
-        targetFile = foundFile;
-      } else {
-        // 如果没找到（理论上不应该发生，但为了类型安全）
-        targetFile = {
-          id: file.id,
-          name: file.name,
-          status: 'uploading',
-          percentage: 0,
-          file: file.file
-        };
-        fileListRef.value.push(targetFile);
+    // 预处理文件（如果未处理）
+    if (!queueItem.processed) {
+      const shouldUpload = await preprocessFile(queueItem);
+      if (!shouldUpload) {
+        // 文件已存在，跳过上传
+        uploadQueue.items.shift();
+        uploadQueue.processing = false;
+        // 继续处理下一个文件
+        setTimeout(processUploadQueue, 0);
+        return;
       }
-    } else {
-      // 如果没找到，创建一个新的文件信息对象
-      targetFile = {
-        id: file.id,
-        name: file.name,
-        status: 'uploading',
-        percentage: 0,
-        file: file.file
-      };
-      fileListRef.value.push(targetFile);
+    }
+    if (!queueItem.targetFileName || queueItem.targetFolderId === undefined || !file.file) {
+      throw new Error('文件信息不完整');
     }
 
-    // 更新当前正在上传的文件
-    currentUploadingFile.value = targetFile;
+    const fileName = queueItem.targetFileName;
+    const parentId = queueItem.targetFolderId;
+    const originalFile = file.file;
 
-    // 解析文件路径
-    const { fileName, folderPath, originalFile } = parseFilePath(file);
+    // 前端自己生成 uploadId
+    const uploadId = generateUploadId();
 
-    if (!originalFile) {
-      throw new Error('文件不存在');
-    }
+    // 将 uploadId 存储到文件对象中
+    (file as any).uploadId = uploadId;
 
-    // 获取基础父目录ID
-    const baseParentId = breadcrumbStore.lastCrumbTypeDir()?.id || '';
+    // 合并后的上传函数
+    await uploadFile(originalFile, uploadId, parentId, fileName, fileInfo);
 
-    // 获取目标文件夹ID
-    let targetFolderId: string;
-    if (folderPath) {
-      // 更新上传模式为文件夹上传
-      uploadMode.value = true;
-      // 有文件夹路径，递归创建文件夹
-      try {
-        targetFolderId = await createNestedFolders(folderPath, baseParentId);
-        // 更新文件名为实际的文件名（去掉路径）
-        targetFile.name = fileName;
-        file.name = fileName;
-      } catch (error) {
-        console.error('创建文件夹失败，将使用父目录上传:', error);
-        targetFolderId = baseParentId;
-      }
-    } else {
-      // 更新上传模式为文件上传
-      uploadMode.value = false;
-      // 无文件夹路径，使用当前父目录
-      targetFolderId = baseParentId;
-    }
+    // 设置文件状态为 finished
+    fileInfo.status = 'finished';
+    fileInfo.percentage = 100;
+    onFinish();
 
-    // 首先检查文件是否已存在
-    const fileExistsResponse = await exists(fileName, targetFolderId);
-    if (fileExistsResponse.exists) {
-      // 文件已存在，跳过上传，设置状态为 finished
-      targetFile.status = 'finished';
-      targetFile.percentage = 100;
-      message.warning(`文件 "${fileName}" 已存在，跳过上传`);
-      onFinish();
-    } else {
-      // 文件不存在，执行正常上传流程
-      targetFile.status = 'uploading';
-      targetFile.percentage = 0;
-
-      const fileSize = originalFile.size;
-      const totalChunks = fileSize <= CHUNK_SIZE ? 1 : Math.ceil(fileSize / CHUNK_SIZE);
-
-      // 前端自己生成 uploadId，使用兼容性更好的方法
-      const uploadId = generateUploadId();
-
-      // 将 uploadId 存储到文件对象中
-      (file as any).uploadId = uploadId;
-
-      await processFileUploadWithId(originalFile, uploadId, targetFolderId, fileName, targetFile);
-
-      // 设置文件状态为 finished
-      targetFile.status = 'finished';
-      targetFile.percentage = 100;
-      onFinish();
-    }
   } catch (error) {
     console.error('Upload error:', error);
-    // 找到对应的文件对象并设置状态为 error
-    const errorFileIndex = fileListRef.value.findIndex(f => f.id === file.id);
-    if (errorFileIndex !== -1) {
-      const errorFile = fileListRef.value[errorFileIndex];
-      if (errorFile) {
-        errorFile.status = 'error';
-        // 显示错误文件名
-        const { fileName } = parseFilePath(file);
-        errorFile.name = fileName;
-      }
-    } else {
-      // 如果没找到，添加一个错误状态的文件
-      const { fileName } = parseFilePath(file);
-      fileListRef.value.push({
-        id: file.id,
-        name: fileName,
-        status: 'error',
-        percentage: 0,
-        file: file.file
-      });
-    }
+    fileInfo.status = 'error';
     onError();
   } finally {
-    isUploading.value = false;
-    // 更新当前正在上传的文件（如果还有文件在上传）
-    const stillUploading = fileListRef.value.find(f => f.status === 'uploading');
-    currentUploadingFile.value = stillUploading || null;
-    // 继续处理队列中的下一个文件
-    await processUploadQueue();
+    // 从队列中移除已处理的文件
+    uploadQueue.items.shift();
+    uploadQueue.processing = false;
+
+    // 更新当前正在上传的文件
+    if (uploadQueue.items.length > 0) {
+      const nextItem = uploadQueue.items[0];
+      if (nextItem) {
+        currentUploadingFile.value = nextItem.fileInfo;
+        // 继续处理下一个文件
+        setTimeout(processUploadQueue, 0);
+      } else {
+        currentUploadingFile.value = null;
+      }
+    } else {
+      currentUploadingFile.value = null;
+    }
+  }
+};
+
+// 自定义上传请求处理
+const handleCustomRequest = async (options: UploadCustomRequestOptions) => {
+  const { file } = options;
+
+  // 创建队列项
+  const queueItem: UploadQueueItem = {
+    id: file.id,
+    fileInfo: file,
+    options,
+    processed: false
+  };
+
+  // 添加到上传队列
+  uploadQueue.items.push(queueItem);
+
+  // 如果当前没有文件在上传，开始处理队列
+  if (!uploadQueue.processing) {
+    processUploadQueue();
   }
 };
 
@@ -489,11 +544,13 @@ const generateUploadId = (): string => {
   }
 
   // 方法3: 使用 Date.now() + Math.random() 作为最后的备选方案
-  return `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  // 使用 slice 替代已弃用的 substr
+  const randomString = Math.random().toString(36).slice(2, 11);
+  return `upload-${Date.now()}-${randomString}`;
 };
 
-// 处理单个文件上传（带 uploadId）
-const processFileUploadWithId = async (
+// 上传文件（合并了大小文件的上传逻辑）
+const uploadFile = async (
   file: File,
   uploadId: string,
   parentId: string,
@@ -501,106 +558,51 @@ const processFileUploadWithId = async (
   uploadFileInfo?: UploadFileInfo
 ) => {
   const fileSize = file.size;
+  const totalChunks = fileSize <= CHUNK_SIZE ? 1 : Math.ceil(fileSize / CHUNK_SIZE);
 
-  try {
-    if (fileSize <= CHUNK_SIZE) {
-      // 小文件直接上传
-      await uploadSmallFileWithId(file, uploadId, parentId, fileName, uploadFileInfo);
-    } else {
-      // 大文件分片上传
-      await uploadLargeFileWithId(file, uploadId, parentId, fileName, uploadFileInfo);
-    }
-  } catch (error) {
-    message.error(`上传文件 "${fileName}" 失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    throw error;
-  }
-};
-
-// 上传小文件（不分片）- 带 uploadId
-const uploadSmallFileWithId = async (
-  file: File,
-  uploadId: string,
-  parentId: string,
-  fileName: string,
-  uploadFileInfo?: UploadFileInfo
-) => {
   try {
     // 更新进度为 0%
     if (uploadFileInfo) {
       uploadFileInfo.percentage = 0;
     }
 
-    // 上传文件分片
-    const response = await uploadChunk(uploadId, 1, 0, file.size, file, channelId);
-    if (response !== null) {
-      messageId.value = response.telegram_msg_id;
-    }
-
-    // 更新进度为 100%
-    if (uploadFileInfo) {
-      uploadFileInfo.percentage = 100;
-    }
-
-    // 合并文件
-    await mergeFile(
-      uploadId,
-      fileName, // 使用解析后的文件名
-      parentId, // 使用目标文件夹ID
-      file.size,
-      file.type || 'application/octet-stream',
-      1,
-      channelId,
-      messageId.value
-    );
-
-    message.success(`文件 "${fileName}" 上传成功`);
-  } catch (uploadError) {
-    // 上传失败时清理上传会话
-    const isCleanedUp = (file as any).isCleanedUp;
-    if (!isCleanedUp) {
-      try {
-        await cleanupUploadSession(uploadId, channelId);
-        (file as any).isCleanedUp = true;
-      } catch (cleanupError) {
-        console.error('Failed to cleanup upload session:', cleanupError);
-      }
-    }
-    throw uploadError;
-  }
-};
-
-// 上传大文件（分片）- 带 uploadId
-const uploadLargeFileWithId = async (
-  file: File,
-  uploadId: string,
-  parentId: string,
-  fileName: string,
-  uploadFileInfo?: UploadFileInfo
-) => {
-  try {
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-    // 串行上传分片 - 逐个上传，失败时立即停止
-    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-      const start = chunkIndex * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
-
-      const response = await uploadChunk(
-        uploadId,
-        totalChunks,
-        chunkIndex,
-        chunk.size,
-        new File([chunk], `${fileName}.${String(chunkIndex + 1).padStart(3, '0')}`, { type: file.type }),
-        channelId
-      );
+    if (totalChunks === 1) {
+      // 小文件直接上传
+      const response = await uploadChunk(uploadId, 1, 0, file.size, file, channelId);
       if (response !== null) {
         messageId.value = response.telegram_msg_id;
       }
 
-      // 更新进度
+      // 更新进度为 100%
       if (uploadFileInfo) {
-        uploadFileInfo.percentage = Math.min(Math.floor(((chunkIndex + 1) / totalChunks) * 100), 100);
+        uploadFileInfo.percentage = 100;
+      }
+    } else {
+      // 大文件分片上传
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+
+        const chunkName = `${fileName}.${String(chunkIndex + 1).padStart(3, '0')}`;
+        const chunkFile = new File([chunk], chunkName, { type: file.type });
+
+        const response = await uploadChunk(
+          uploadId,
+          totalChunks,
+          chunkIndex,
+          chunk.size,
+          chunkFile,
+          channelId
+        );
+        if (response !== null) {
+          messageId.value = response.telegram_msg_id;
+        }
+
+        // 更新进度
+        if (uploadFileInfo) {
+          uploadFileInfo.percentage = Math.min(Math.floor(((chunkIndex + 1) / totalChunks) * 100), 100);
+        }
       }
     }
 
@@ -615,7 +617,6 @@ const uploadLargeFileWithId = async (
       channelId,
       messageId.value
     );
-
     message.success(`文件 "${fileName}" 上传成功`);
   } catch (uploadError) {
     // 上传失败时清理上传会话
@@ -625,7 +626,7 @@ const uploadLargeFileWithId = async (
         await cleanupUploadSession(uploadId, channelId);
         (file as any).isCleanedUp = true;
       } catch (cleanupError) {
-        console.error('Failed to cleanup upload session:', cleanupError);
+        console.error('清理上传会话失败:', cleanupError);
       }
     }
     throw uploadError;
@@ -642,6 +643,10 @@ const handleUploadFinish = () => {
 
 // 处理关闭按钮点击（原取消按钮）
 const handleClose = () => {
+  // 清空上传队列
+  uploadQueue.items = [];
+  uploadQueue.processing = false;
+  currentUploadingFile.value = null;
   emit('cancel');
 };
 

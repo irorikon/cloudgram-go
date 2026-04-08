@@ -60,7 +60,7 @@ import { useBreadcrumbStore } from '@/store/breadcrumb'
 import { useChannelStore } from '@/store/channel'
 import { onMounted, ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useMessage, useLoadingBar, NModal } from 'naive-ui'
+import { useMessage, useLoadingBar, NModal, NBackTop } from 'naive-ui'
 
 // 操作类型枚举
 type OperationType = 'rename' | 'move' | 'download' | 'delete' | 'new-folder' | 'refresh' | 'upload' | null
