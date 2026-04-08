@@ -20,7 +20,8 @@ import {
   DownloadOutline,
   MoveOutline,
   CloudUploadOutline,
-  RefreshOutline
+  RefreshOutline,
+  CheckboxOutline
 } from '@vicons/ionicons5';
 import { useBreadcrumbStore } from '@/store/breadcrumb';
 import { getIcon } from '@/utils/mimetype';
@@ -30,7 +31,6 @@ import type { FileItem } from '@/types/file';
 interface Props {
   files: FileItem[];
   loading: boolean;
-  showSelection?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -39,7 +39,7 @@ const props = defineProps<Props>();
 interface Emits {
   (e: 'folder-click', file: FileItem): void;
   (e: 'file-operation', operation: string, file: FileItem | null): void;
-  (e: 'selection-change', selectedFiles: FileItem[]): void;
+  (e: 'selection-operation', selectedFiles: FileItem[]): void;
   (e: 'file-click', file: FileItem): void;
 }
 
@@ -54,17 +54,19 @@ const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const minHeight = ref('300px');
 const currentFile = ref<FileItem | null>(null);
+const selectedCount = ref(0);
 const selectedFiles = ref<FileItem[]>([]);
+const showSelection = ref(false);
 
 // 表格列定义
 const columns = computed(() => [
-  ...(props.showSelection ? [{
+  ...(showSelection.value ? [{
     type: 'selection' as const,
     width: 36,
     align: 'center' as const
   }] : []),
   {
-    title: '文件名',
+    title: selectedCount.value > 0 ? `已选择${selectedCount.value}项` : '文件名',
     key: 'name',
     align: 'left' as const,
     // ellipsis: true,
@@ -149,7 +151,7 @@ const formatFileSize = (size: number): string => {
 // 处理选择变化
 const handleSelectionChange = (keys: any[]) => {
   selectedFiles.value = props.files.filter(file => keys.includes(file.id));
-  emit('selection-change', selectedFiles.value);
+  selectedCount.value = keys.length;
 };
 
 // 处理文件点击
@@ -219,7 +221,37 @@ const contextMenuOptions = computed(() => {
 
   const hasCurrentFile = currentFile.value
 
-  if (hasCurrentFile) {
+  if (selectedCount.value > 0) {
+    options.push(
+      {
+        label: '删除',
+        key: 'delete',
+        icon: () => h(NIcon, {
+          component: TrashOutline,
+          size: 24,
+          color: '#e5484d'
+        }),
+      },
+      {
+        label: '移动',
+        key: 'move',
+        icon: () => h(NIcon, {
+          component: MoveOutline,
+          size: 24,
+          color: '#ffb224'
+        }),
+      },
+      {
+        label: '多选',
+        key: 'selection',
+        icon: () => h(NIcon, {
+          component: CheckboxOutline,
+          size: 24,
+          color: '#1890ff'
+        }),
+      }
+    )
+  } else if (hasCurrentFile) {
     options.push(
       {
         label: '重命名',
@@ -255,6 +287,15 @@ const contextMenuOptions = computed(() => {
           component: DownloadOutline,
           size: 24,
           color: '#05a2c2'
+        }),
+      },
+      {
+        label: '多选',
+        key: 'selection',
+        icon: () => h(NIcon, {
+          component: CheckboxOutline,
+          size: 24,
+          color: '#1890ff'
         }),
       }
     );
@@ -295,7 +336,11 @@ const contextMenuOptions = computed(() => {
 
 // 处理右键菜单项选择
 const handleContextMenuItemSelect = (key: string) => {
-  emit('file-operation', key, currentFile.value)
+  if (key === 'selection') {
+    showSelection.value = !showSelection.value;
+  } else {
+    emit('file-operation', key, currentFile.value)
+  }
   hideContextMenu();
 };
 

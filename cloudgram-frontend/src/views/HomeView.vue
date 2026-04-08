@@ -4,7 +4,7 @@
       <Header />
       <!-- 后续组件将在这里添加 -->
       <Breadcrumb class="component-gap" @item-click="handleListFileItemClick" />
-      <FileList :files="fileList" :loading="loading" class="component-gap" @folder-click="handleListFileItemClick"
+      <FileList :files="fileList" :loading="loading" :showSelection="showSelection" class="component-gap" @folder-click="handleListFileItemClick"
         @file-operation="handleFileOperation" @file-click="handleFileClick" />
       <n-back-top :right="100" />
     </div>
@@ -63,7 +63,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useMessage, useLoadingBar, NModal, NBackTop } from 'naive-ui'
 
 // 操作类型枚举
-type OperationType = 'rename' | 'move' | 'download' | 'delete' | 'new-folder' | 'refresh' | 'upload' | null
+type OperationType = 'rename' | 'move' | 'download' | 'delete' | 'new-folder' | 'refresh' | 'upload' | 'selection' | null
 
 // 获取用户 store 和路由
 const userStore = useUserStore()
@@ -82,6 +82,7 @@ const isFromLogin = computed(() => {
 // 文件列表和加载状态
 const fileList = ref<FileItem[]>([])
 const loading = ref(false)
+const showSelection = ref(false)
 
 // 统一的操作状态
 const showOperationModal = ref(false)
@@ -140,7 +141,7 @@ const handleListFileItemClick = async (item: any) => {
     // 根据面包屑项的ID获取对应的文件列表
     // 如果是根目录（id为空字符串），传入null
     const parentId = item.id === '' ? null : item.id
-    await loadFiles(parentId)
+    await loadFilesWithoutChannel(parentId)
   } catch (error) {
     console.error('Failed to load files:', error)
   } finally {
@@ -212,10 +213,13 @@ const handlePreviewClose = () => {
 // 统一的文件操作处理函数
 const handleFileOperation = (operation: string, file: FileItem | null) => {
   // 验证操作类型
-  const validOperations: OperationType[] = ['rename', 'move', 'download', 'delete', 'new-folder', 'refresh', 'upload'];
+  const validOperations: OperationType[] = ['rename', 'move', 'download', 'delete', 'new-folder', 'refresh', 'upload', 'selection'];
   if (!validOperations.includes(operation as OperationType)) {
     console.warn('Unknown operation:', operation);
     return;
+  }
+  if (operation === 'selection') {
+    showSelection.value = !showSelection.value
   }
   if (operation === 'refresh') {
     refreshFileList();
