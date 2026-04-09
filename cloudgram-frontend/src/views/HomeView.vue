@@ -4,8 +4,9 @@
       <Header />
       <!-- 后续组件将在这里添加 -->
       <Breadcrumb class="component-gap" @item-click="handleListFileItemClick" />
-      <FileList :files="fileList" :loading="loading" :showSelection="showSelection" class="component-gap" @folder-click="handleListFileItemClick"
-        @file-operation="handleFileOperation" @file-click="handleFileClick" />
+      <FileList :files="fileList" :loading="loading" :showSelection="showSelection" class="component-gap"
+        @folder-click="handleListFileItemClick" @file-operation="handleFileOperation"
+        @selection-operation="handleSelectionOperation" @file-click="handleFileClick" />
       <n-back-top :right="100" />
     </div>
     <Footer />
@@ -88,6 +89,7 @@ const showSelection = ref(false)
 const showOperationModal = ref(false)
 const currentOperation = ref<OperationType>(null)
 const currentOperationFile = ref<FileItem | null>(null)
+const currentOperationFiles = ref<FileItem[]>([])
 // 删除 Telegram 进度相关
 const deleteProgress = ref(0)
 const totalChunks = ref(0)
@@ -236,6 +238,30 @@ const handleFileOperation = (operation: string, file: FileItem | null) => {
   } else {
     currentOperationFile.value = file;
   }
+  // 处理移动文件
+  if (operation === 'move') {
+    if (!file) {
+      console.warn('Move operation called without valid file');
+      return;
+    }
+    currentOperationFiles.value = Array.isArray(file) ? file : [file]
+  }
+  currentOperation.value = operation as OperationType;
+  showOperationModal.value = true;
+}
+
+const handleSelectionOperation = async (operation: string, files: FileItem[]) => {
+  // 验证操作类型
+  const validOperations: OperationType[] = ['move'];
+  if (!validOperations.includes(operation as OperationType)) {
+    console.warn('Unknown operation:', operation);
+    return;
+  }
+  if (!Array.isArray(files) || files.length === 0) {
+    message.error('请选择要移动的文件')
+  } else {
+    currentOperationFiles.value = files;
+  }
 
   currentOperation.value = operation as OperationType;
   showOperationModal.value = true;
@@ -274,30 +300,48 @@ const handleRenameConfirm = async (newName: string) => {
 
 // 处理移动文件确认
 const handleMoveConfirm = async (newParentId: string) => {
-  if (!currentOperationFile.value) {
+  if (!currentOperationFiles.value || currentOperationFiles.value.length === 0) {
     handleOperationCancel()
     return
   }
 
+  // 获取当前面包屑的ID
+  const lastCrumb = breadcrumbStore.lastCrumb()
+  const currentParentId = lastCrumb?.id || null
+
+  if (currentParentId === newParentId) {
+    message.warning('不能将文件移动到相同的目录')
+    return
+  }
+  
   try {
     loadingStatus(true)
     showOperationModal.value = false
 
-    // 调用移动文件API
-    await moveFile(currentOperationFile.value.id, newParentId)
+    // 准备文件ID数组
+    const fileIds = currentOperationFiles.value.map(file => file.id)
+
+    // 调用批量移动文件API
+    await moveFile(fileIds, newParentId)
 
     // 重新加载当前目录的文件列表
-    const lastCrumb = breadcrumbStore.lastCrumb()
-    const currentParentId = lastCrumb?.id || null
     await loadFilesWithoutChannel(currentParentId)
 
-    message.success('移动文件成功')
+    // 显示成功消息
+    const fileCount = currentOperationFiles.value.length
+    if (fileCount === 1) {
+      const firstFile = currentOperationFiles.value.length > 0 ? currentOperationFiles.value[0] : null
+      message.success(`已成功移动 "${firstFile?.name || '文件'}"`)
+    } else {
+      message.success(`已成功移动 ${fileCount} 个文件`)
+    }
   } catch (error) {
     console.error('移动文件失败:', error)
     message.error('移动文件失败，请稍后重试')
   } finally {
     loadingStatus(false)
     currentOperationFile.value = null
+    currentOperationFiles.value = []
     currentOperation.value = null
   }
 }

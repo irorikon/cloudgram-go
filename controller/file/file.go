@@ -141,9 +141,31 @@ func (f *FileApi) UpdateFile(c *gin.Context) {
 		return
 	}
 
-	fileID, ok := f.parseUUID(c, req.ID, "id")
-	if !ok {
-		return
+	var fileID uuid.UUID
+	if req.Active == "rename" {
+		res, ok := f.parseUUID(c, req.ID, "id")
+		if !ok {
+			response.FailWithMessage("invalid file id", c)
+		}
+		fileID = res
+	}
+
+	var fileIDs []uuid.UUID
+	if req.Active == "move" {
+		if req.IDs != nil {
+			// 批量操作需要解析文件IDs
+			parsedIDs := make([]uuid.UUID, len(req.IDs))
+			for i, idStr := range req.IDs {
+				parsedID, ok := f.parseUUID(c, idStr, "ids")
+				if !ok {
+					response.FailWithMessage("invalid file ids", c)
+				}
+				parsedIDs[i] = parsedID
+			}
+			fileIDs = parsedIDs
+		} else {
+			response.FailWithMessage("invalid file ids", c)
+		}
 	}
 
 	var newParentID *uuid.UUID
@@ -169,7 +191,7 @@ func (f *FileApi) UpdateFile(c *gin.Context) {
 		return
 	}
 
-	updatedFile, err := fileService.UpdateFileInfo(fileID, req.Active, req.NewName, newParentID)
+	updatedFile, err := fileService.UpdateFileInfo(fileID, fileIDs, req.Active, req.NewName, newParentID)
 	if err != nil {
 		if err.Error() == "file not found" {
 			response.FailWithMessage("file not found", c)

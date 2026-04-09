@@ -25,14 +25,15 @@ type LoginRequest struct {
 
 // FileRequest 文件列表请求
 type FileRequest struct {
-	Active       string `json:"active,omitempty"`
-	ID           string `json:"id,omitempty"`
-	FileName     string `json:"file_name,omitempty"`
-	NewName      string `json:"new_name,omitempty"`
-	ParentID     string `json:"parent_id,omitempty"`
-	IsDir        bool   `json:"is_dir,omitempty"`
-	Recursive    bool   `json:"recursive,omitempty"`
-	DeleteWithTG bool   `json:"delete_with_tg,omitempty"`
+	Active       string   `json:"active,omitempty"`
+	IDs          []string `json:"ids,omitempty"`
+	ID           string   `json:"id,omitempty"`
+	FileName     string   `json:"file_name,omitempty"`
+	NewName      string   `json:"new_name,omitempty"`
+	ParentID     string   `json:"parent_id,omitempty"`
+	IsDir        bool     `json:"is_dir,omitempty"`
+	Recursive    bool     `json:"recursive,omitempty"`
+	DeleteWithTG bool     `json:"delete_with_tg,omitempty"`
 }
 
 type ChannelRequest struct {

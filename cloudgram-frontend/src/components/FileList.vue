@@ -1,8 +1,8 @@
 <template>
   <div class="file-list" @contextmenu.prevent="handleGlobalContextMenu">
-    <n-data-table ref="dataTableRef" :columns="columns" :data="files" :row-key="getRowKey" :bordered="false"
-      :loading="loading" size="medium" @update:checked-row-keys="handleSelectionChange"
-      :style="{ minHeight: minHeight }" />
+    <n-data-table :key="'file-table-' + tableRenderKey" ref="dataTableRef" :columns="columns" :data="files"
+      :row-key="getRowKey" :bordered="false" :loading="loading" size="medium"
+      @update:checked-row-keys="handleSelectionChange" :style="{ minHeight: minHeight }" />
   </div>
 
   <!-- 右键菜单 -->
@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, onMounted } from 'vue';
+import { ref, computed, h, onMounted, watch, nextTick } from 'vue';
 import { NIcon, NDataTable, NDropdown } from 'naive-ui';
 import {
   AddOutline,
@@ -39,7 +39,7 @@ const props = defineProps<Props>();
 interface Emits {
   (e: 'folder-click', file: FileItem): void;
   (e: 'file-operation', operation: string, file: FileItem | null): void;
-  (e: 'selection-operation', selectedFiles: FileItem[]): void;
+  (e: 'selection-operation', operation: string, selectedFiles: FileItem[]): void;
   (e: 'file-click', file: FileItem): void;
 }
 
@@ -57,6 +57,12 @@ const currentFile = ref<FileItem | null>(null);
 const selectedCount = ref(0);
 const selectedFiles = ref<FileItem[]>([]);
 const showSelection = ref(false);
+// 表格实例
+const dataTableRef = ref();
+// 选中的行 keys
+const selectedRowKeys = ref<(string)[]>([]);
+// 表格重新渲染的 key
+const tableRenderKey = ref(0);
 
 // 表格列定义
 const columns = computed(() => [
@@ -150,9 +156,35 @@ const formatFileSize = (size: number): string => {
 
 // 处理选择变化
 const handleSelectionChange = (keys: any[]) => {
+  selectedRowKeys.value = keys;
   selectedFiles.value = props.files.filter(file => keys.includes(file.id));
   selectedCount.value = keys.length;
 };
+
+// 重置表格选择状态
+const resetTableSelection = async () => {
+  // 1. 清空选中的 keys
+  selectedRowKeys.value = [];
+
+  // 2. 更新内部状态
+  selectedFiles.value = [];
+  selectedCount.value = 0;
+
+  // 3. 等待 DOM 更新
+  await nextTick();
+
+  // 4. 强制表格重新渲染
+  tableRenderKey.value += 1;
+};
+
+// 监听文件列表变化
+watch(() => props.files, async (newFiles, oldFiles) => {
+  // 简单但有效的比较
+  if (newFiles.length !== oldFiles.length ||
+    JSON.stringify(newFiles.map(f => f.id)) !== JSON.stringify(oldFiles.map(f => f.id))) {
+    await resetTableSelection();
+  }
+}, { deep: true });
 
 // 处理文件点击
 const handleRowClick = (row: FileItem, event: MouseEvent) => {
@@ -223,15 +255,6 @@ const contextMenuOptions = computed(() => {
 
   if (selectedCount.value > 0) {
     options.push(
-      {
-        label: '删除',
-        key: 'delete',
-        icon: () => h(NIcon, {
-          component: TrashOutline,
-          size: 24,
-          color: '#e5484d'
-        }),
-      },
       {
         label: '移动',
         key: 'move',
@@ -339,7 +362,11 @@ const handleContextMenuItemSelect = (key: string) => {
   if (key === 'selection') {
     showSelection.value = !showSelection.value;
   } else {
-    emit('file-operation', key, currentFile.value)
+    if (showSelection.value && selectedRowKeys.value.length > 0) {
+      emit('selection-operation', key, selectedFiles.value)
+    } else {
+      emit('file-operation', key, currentFile.value)
+    }
   }
   hideContextMenu();
 };

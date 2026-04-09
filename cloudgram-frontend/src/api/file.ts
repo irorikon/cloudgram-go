@@ -55,10 +55,10 @@ export function renameFile(file_id: string, newName: string) {
 /**
  * 移动文件
  */
-export function moveFile(file_id: string, newParentId: string) {
+export function moveFile(fileIds: string[], newParentId: string) {
   return request.post('file/update', {
     active: 'move',
-    id: file_id,
+    ids: fileIds,
     parent_id: newParentId
   })
 }

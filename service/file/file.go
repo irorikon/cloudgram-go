@@ -57,6 +57,22 @@ func (f *FileService) GetFileInfo(fileID uuid.UUID) (*model.File, error) {
 	return &file, err
 }
 
+// GetFilesInfo 根据ID获取文件信息
+func (f *FileService) GetFilesInfo(fileIDs uuid.UUIDs) ([]model.File, error) {
+	if len(fileIDs) == 0 {
+		return []model.File{}, nil
+	}
+
+	var files []model.File
+	if err := config.DB.
+		Where("id IN (?)", fileIDs).
+		Find(&files).Error; err != nil {
+		return nil, fmt.Errorf("failed to query files: %w", err)
+	}
+
+	return files, nil
+}
+
 // GetFileIDRecursively 递归获取文件ID
 // 如果传入的是文件，返回包含该文件ID的切片
 // 如果传入的是目录，返回该目录下所有文件的ID
@@ -114,6 +130,28 @@ func (f *FileService) GetFileInfoByName(name string, parentID *uuid.UUID) (*mode
 	return &file, err
 }
 
+// GetFilesInfoByName 根据文件名和父目录查询文件
+func (f *FileService) GetFilesInfoByName(names []string, parentID *uuid.UUID) ([]model.File, error) {
+	if len(names) == 0 {
+		return []model.File{}, nil
+	}
+
+	var files []model.File
+	query := config.DB.Where("name IN ?", names)
+
+	if parentID == nil {
+		query = query.Where("parent_id IS NULL")
+	} else {
+		query = query.Where("parent_id = ?", parentID)
+	}
+
+	if err := query.Find(&files).Error; err != nil {
+		return nil, fmt.Errorf("failed to query files by name: %w", err)
+	}
+
+	return files, nil
+}
+
 // AddFileInfo 添加文件
 func (f *FileService) AddFileInfo(name, mimeType string, parentID *uuid.UUID, isDir bool, size int64) (*model.File, error) {
 	name = strings.TrimSpace(name)
@@ -144,12 +182,12 @@ func (f *FileService) AddFileInfo(name, mimeType string, parentID *uuid.UUID, is
 }
 
 // UpdateFileInfo 更新文件
-func (f *FileService) UpdateFileInfo(fileID uuid.UUID, action, newName string, newParentID *uuid.UUID) (*model.File, error) {
+func (f *FileService) UpdateFileInfo(fileID uuid.UUID, fileIDs uuid.UUIDs, action, newName string, newParentID *uuid.UUID) (any, error) {
 	switch action {
 	case "rename":
 		return f.renameFile(fileID, newName)
 	case "move":
-		return f.moveFile(fileID, newParentID)
+		return f.moveFile(fileID, fileIDs, newParentID)
 	}
 	return nil, errors.New("invalid action")
 }
@@ -176,46 +214,95 @@ func (f *FileService) renameFile(fileID uuid.UUID, newName string) (*model.File,
 }
 
 // moveFile 移动文件
-func (f *FileService) moveFile(fileID uuid.UUID, newParentID *uuid.UUID) (*model.File, error) {
-	if fileID == uuid.Nil {
+func (f *FileService) moveFile(fileID uuid.UUID, fileIDs uuid.UUIDs, newParentID *uuid.UUID) ([]model.File, error) {
+	var moveIds []uuid.UUID
+
+	// 参数验证
+	if fileID == uuid.Nil && len(fileIDs) == 0 {
 		return nil, errors.New("invalid file id")
+	} else if fileID != uuid.Nil && len(fileIDs) > 0 {
+		return nil, errors.New("cannot specify both fileID and fileIDs")
+	} else if fileID != uuid.Nil {
+		moveIds = append(moveIds, fileID)
+	} else {
+		moveIds = fileIDs
 	}
 
-	file, err := f.GetFileInfo(fileID)
-	if err != nil || file == nil {
-		return nil, fmt.Errorf("file not found: %s", fileID.String())
+	// 获取要移动的文件信息
+	files, err := f.GetFilesInfo(moveIds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get files: %w", err)
+	}
+	if len(files) == 0 {
+		return nil, errors.New("files not found")
+	}
+
+	// 检查目标目录是否存在（如果不为nil）
+	if newParentID != nil {
+		parentFiles, err := f.GetFilesInfo([]uuid.UUID{*newParentID})
+		if err != nil || len(parentFiles) == 0 {
+			return nil, errors.New("target directory not found")
+		}
+		if !parentFiles[0].IsDir {
+			return nil, errors.New("target is not a directory")
+		}
 	}
 
 	// 检查不能移动到自身
-	if newParentID != nil && *newParentID == fileID {
-		return nil, errors.New("cannot move to self")
+	for _, file := range files {
+		if newParentID != nil && file.ID == *newParentID {
+			return nil, errors.New("cannot move to self")
+		}
 	}
 
 	// 如果是目录，检查循环依赖（目标目录不是根目录时才检查）
-	if file.IsDir && newParentID != nil {
-		// 检查 newParentID 是否是 fileID 的子孙
-		isDescendant, err := f.isDescendant(fileID, *newParentID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check directory hierarchy: %v", err)
-		}
-		if isDescendant {
-			return nil, errors.New("cannot move a directory into its own subdirectory")
+	for _, file := range files {
+		if file.IsDir && newParentID != nil {
+			// 检查 newParentID 是否是 fileID 的子孙
+			isDescendant, err := f.isDescendant(fileID, *newParentID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to check directory hierarchy: %v", err)
+			}
+			if isDescendant {
+				return nil, errors.New("cannot move a directory into its own subdirectory")
+			}
 		}
 	}
 
 	// 检查目标目录是否存在同名文件
-	if exists, _ := f.GetFileInfoByName(file.Name, newParentID); exists != nil && exists.ID != fileID {
-		return nil, errors.New("file name already exists in the target directory")
+	var fileNames []string
+	for _, file := range files {
+		fileNames = append(fileNames, file.Name)
 	}
 
-	// 更新父目录
-	err = config.DB.Model(&model.File{}).Where("id = ?", fileID).
+	existingFiles, err := f.GetFilesInfoByName(fileNames, newParentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check duplicate names: %w", err)
+	}
+
+	// 构建现有文件映射
+	existingFileMap := make(map[string]uuid.UUID)
+	for _, existingFile := range existingFiles {
+		existingFileMap[existingFile.Name] = existingFile.ID
+	}
+
+	// 检查重名冲突
+	for _, file := range files {
+		if existingID, exists := existingFileMap[file.Name]; exists && existingID != file.ID {
+			return nil, fmt.Errorf("file '%s' already exists in the target directory", file.Name)
+		}
+	}
+
+	// 批量更新父目录
+	err = config.DB.Model(&model.File{}).
+		Where("id IN ?", moveIds).
 		Update("parent_id", newParentID).Error
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to update parent directory: %w", err)
 	}
 
-	return f.GetFileInfo(fileID)
+	// 重新获取更新后的文件信息
+	return f.GetFilesInfo(moveIds)
 }
 
 // isDescendant 检查 descendant 是否是 ancestor 的子孙
