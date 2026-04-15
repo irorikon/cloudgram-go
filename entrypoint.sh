@@ -49,6 +49,11 @@ if [ -n "$JWT_SECRET_KEY" ]; then
     ARGS="$ARGS --jwt-secret '$JWT_SECRET_KEY'"
 fi
 
+# Add JWT expires time if specified
+if [ -n "$JWT_EXPIRES_TIME" ]; then
+    ARGS="$ARGS --jwt-expires-time '$JWT_EXPIRES_TIME'"
+fi
+
 # Enable debug mode if specified
 if [ -n "$DEBUG" ] && ([ "$DEBUG" = "true" ] || [ "$DEBUG" = "1" ]); then
     ARGS="$ARGS -d"

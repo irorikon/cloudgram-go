@@ -17,10 +17,11 @@ var (
 	AuthPassword     string
 	TelegramBotToken string
 
-	DBTYPE       string
-	DSN          string
-	LogPath      string
-	JwtSecretKey string
+	DBTYPE         string
+	DSN            string
+	LogPath        string
+	JwtSecretKey   string
+	JwtExpiresTime string
 
 	Version string = "1.0.7"
 )
@@ -46,9 +47,8 @@ var GlobalCorsConfig []WhiteListConfig = []WhiteListConfig{
 }
 
 var GlobalJWTConfig = JWTConfig{
-	BufferTime:  "1h",
-	ExpiresTime: "24h",
-	Issuer:      "CloudGram-Go",
+	BufferTime: "1h",
+	Issuer:     "CloudGram-Go",
 }
 
 type WhiteListConfig struct {

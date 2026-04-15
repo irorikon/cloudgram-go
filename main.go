@@ -24,6 +24,7 @@ func init() {
 	flag.StringVar(&config.DSN, "dsn", "file:./cloudgram.db?cache=shared&mode=rwc", "Database connection string")
 	flag.StringVar(&config.LogPath, "log", "", "Log file path")
 	flag.StringVar(&config.JwtSecretKey, "jwt-secret", "cloudgram-secret-key", "JWT secret key")
+	flag.StringVar(&config.JwtExpiresTime, "jwt-expires-time", "24h", "JWT expires time (e.g., 24h, 30m)")
 	flag.BoolVar(&config.Debug, "debug", false, "Enable debug mode")
 	flag.BoolVar(&config.Debug, "d", false, "Enable debug mode")
 	flag.BoolVar(&config.PrintVersion, "version", false, "Print version and exit")
@@ -42,6 +43,7 @@ Optional parameters:
           --dsn                      Database connection string (default ./cloudgram.db)
           --log                      Log file path
           --jwt-secret               JWT secret key (default cloudgram-secret-key)
+          --jwt-expires-time         JWT expires time (default 24h)
     -d,   --debug                    Enable debug mode
     -v,   --version                  Show software version
     -h,   --help                     Show help message

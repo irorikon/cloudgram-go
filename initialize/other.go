@@ -8,6 +8,12 @@ import (
 )
 
 func OtherInit() {
+	// 初始化 JWT
+	if _, err := utils.ParseDuration(config.JwtExpiresTime); err != nil {
+		panic(err)
+	} else {
+		config.GlobalJWTConfig.ExpiresTime = config.JwtExpiresTime
+	}
 	// 初始化其他配置
 	dr, err := utils.ParseDuration(config.GlobalJWTConfig.ExpiresTime)
 	if err != nil {
