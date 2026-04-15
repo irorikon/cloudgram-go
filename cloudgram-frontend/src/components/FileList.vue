@@ -253,75 +253,77 @@ const contextMenuOptions = computed(() => {
 
   const hasCurrentFile = currentFile.value
 
-  if (selectedCount.value > 0) {
-    options.push(
-      {
-        label: '移动',
-        key: 'move',
-        icon: () => h(NIcon, {
-          component: MoveOutline,
-          size: 24,
-          color: '#ffb224'
-        }),
-      },
-      {
-        label: '多选',
-        key: 'selection',
-        icon: () => h(NIcon, {
-          component: CheckboxOutline,
-          size: 24,
-          color: '#1890ff'
-        }),
-      }
-    )
-  } else if (hasCurrentFile) {
-    options.push(
-      {
-        label: '重命名',
-        key: 'rename',
-        icon: () => h(NIcon, {
-          component: PencilOutline,
-          size: 24,
-          color: '#6e56cf'
-        }),
-      },
-      {
-        label: '删除',
-        key: 'delete',
-        icon: () => h(NIcon, {
-          component: TrashOutline,
-          size: 24,
-          color: '#e5484d'
-        }),
-      },
-      {
-        label: '移动',
-        key: 'move',
-        icon: () => h(NIcon, {
-          component: MoveOutline,
-          size: 24,
-          color: '#ffb224'
-        }),
-      },
-      {
-        label: '下载',
-        key: 'download',
-        icon: () => h(NIcon, {
-          component: DownloadOutline,
-          size: 24,
-          color: '#05a2c2'
-        }),
-      },
-      {
-        label: '多选',
-        key: 'selection',
-        icon: () => h(NIcon, {
-          component: CheckboxOutline,
-          size: 24,
-          color: '#1890ff'
-        }),
-      }
-    );
+  if (hasCurrentFile) {
+    if (selectedCount.value > 0) {
+      options.push(
+        {
+          label: '移动',
+          key: 'move',
+          icon: () => h(NIcon, {
+            component: MoveOutline,
+            size: 24,
+            color: '#ffb224'
+          }),
+        },
+        {
+          label: '多选',
+          key: 'selection',
+          icon: () => h(NIcon, {
+            component: CheckboxOutline,
+            size: 24,
+            color: '#1890ff'
+          }),
+        }
+      )
+    } else {
+      options.push(
+        {
+          label: '重命名',
+          key: 'rename',
+          icon: () => h(NIcon, {
+            component: PencilOutline,
+            size: 24,
+            color: '#6e56cf'
+          }),
+        },
+        {
+          label: '删除',
+          key: 'delete',
+          icon: () => h(NIcon, {
+            component: TrashOutline,
+            size: 24,
+            color: '#e5484d'
+          }),
+        },
+        {
+          label: '移动',
+          key: 'move',
+          icon: () => h(NIcon, {
+            component: MoveOutline,
+            size: 24,
+            color: '#ffb224'
+          }),
+        },
+        {
+          label: '下载',
+          key: 'download',
+          icon: () => h(NIcon, {
+            component: DownloadOutline,
+            size: 24,
+            color: '#05a2c2'
+          }),
+        },
+        {
+          label: '多选',
+          key: 'selection',
+          icon: () => h(NIcon, {
+            component: CheckboxOutline,
+            size: 24,
+            color: '#1890ff'
+          }),
+        }
+      );
+    }
   } else {
     options.push(
       {
