@@ -359,12 +359,15 @@ const contextMenuOptions = computed(() => {
   return options;
 });
 
+// 始终可点击的项目
+const alwaysClickableItems = ['new-folder', 'upload', 'refresh'];
+
 // 处理右键菜单项选择
 const handleContextMenuItemSelect = (key: string) => {
   if (key === 'selection') {
     showSelection.value = !showSelection.value;
   } else {
-    if (showSelection.value && selectedRowKeys.value.length > 0) {
+    if (showSelection.value && selectedRowKeys.value.length > 0 && !alwaysClickableItems.includes(key)) {
       emit('selection-operation', key, selectedFiles.value)
     } else {
       emit('file-operation', key, currentFile.value)
