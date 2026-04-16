@@ -23,7 +23,7 @@ var (
 	JwtSecretKey   string
 	JwtExpiresTime string
 
-	Version string = "1.0.8"
+	Version string = "1.0.9"
 )
 
 // 全局参数配置
