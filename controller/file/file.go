@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/irorikon/cloudgram-go/config"
+	"github.com/irorikon/cloudgram-go/logger"
 	"github.com/irorikon/cloudgram-go/model/request"
 	"github.com/irorikon/cloudgram-go/model/response"
 )
@@ -228,13 +229,23 @@ func (f *FileApi) DeleteFile(c *gin.Context) {
 				return
 			}
 			if len(fileChunks) > 0 {
-				var msgIDs []int
-				var channelID int64
+				// 按频道分组消息ID
+				channelToMsgIDs := make(map[int64][]int)
+
 				for _, fileChunk := range fileChunks {
-					channelID = fileChunk.ChannelID
-					msgIDs = append(msgIDs, fileChunk.TelegramMsgID)
+					channelID := fileChunk.ChannelID
+					channelToMsgIDs[channelID] = append(channelToMsgIDs[channelID], fileChunk.TelegramMsgID)
 				}
-				telegramService.DeleteTelegramFiles(c, config.TeleBot, channelID, msgIDs)
+
+				// 对每个频道，分批删除消息
+				for channelID, msgIDs := range channelToMsgIDs {
+					// 分批删除，每批最多100个
+					for i := 0; i < len(msgIDs); i += 100 {
+						end := min(i+100, len(msgIDs))
+						logger.SysLogF("Deleting Telegram files for channel %d and msg IDs: %v", channelID, msgIDs[i:end])
+						telegramService.DeleteTelegramFiles(c, config.TeleBot, channelID, msgIDs[i:end])
+					}
+				}
 			}
 		}
 	}
