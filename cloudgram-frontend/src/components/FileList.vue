@@ -75,6 +75,7 @@ const columns = computed(() => [
     title: selectedCount.value > 0 ? `已选择${selectedCount.value}项` : '文件名',
     key: 'name',
     align: 'left' as const,
+    minWidth: 260,
     // ellipsis: true,
     render: (row: FileItem) => {
       return h('div', {
