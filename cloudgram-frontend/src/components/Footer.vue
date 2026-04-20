@@ -1,8 +1,8 @@
 <template>
     <div class="footer">
         <div class="footer-content">
-            <a href="https://workers.cloudflare.com/" target="_blank" rel="noopener noreferrer"
-                class="footer-link">Power By Cloudflare Worker</a>
+            <a href="https://github.com/irorikon/cloudgram-go" target="_blank" rel="noopener noreferrer"
+                class="footer-link">Power By CloudGram-Go</a>
             <span>|</span>
             <router-link to="/about" class="footer-link">About</router-link>
         </div>
