@@ -15,7 +15,6 @@ type FileService struct{}
 
 var FileApp = new(FileService)
 
-// GetFileList 根据 ParentID 获取文件列表
 func (f *FileService) GetFileList(parentID *uuid.UUID) ([]*model.File, error) {
 	var files []*model.File
 	query := config.DB
@@ -27,7 +26,16 @@ func (f *FileService) GetFileList(parentID *uuid.UUID) ([]*model.File, error) {
 		query = query.Where("parent_id = ?", parentID)
 	}
 
-	err := query.Order("is_dir DESC, name ASC").Find(&files).Error
+	// 方案1a: 使用中文拼音排序（需要数据库支持）
+	// 在 PostgreSQL 中，可以指定 COLLATE
+	// query = query.Order("is_dir DESC").
+	// 	Order("name COLLATE \"zh_CN\".\"C\" ASC")
+
+	// 或者方案1b: 如果数据库不支持 zh_CN 排序规则，可以使用其他方法
+	query = query.Order("is_dir DESC").
+		Order("convert_to(name, 'GBK') ASC")
+
+	err := query.Find(&files).Error
 	return files, err
 }
 
@@ -43,7 +51,7 @@ func (f *FileService) GetFoldersByParentId(parentID *uuid.UUID) ([]*model.File, 
 		query = query.Where("parent_id = ?", parentID)
 	}
 
-	err := query.Order("name ASC").Find(&folders).Error
+	err := query.Order("convert_to(name, 'GBK') ASC").Find(&folders).Error
 	return folders, err
 }
 
