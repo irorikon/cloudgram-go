@@ -55,11 +55,13 @@ import { useRouter } from 'vue-router';
 import { NIcon, NAvatar, NButton, NDropdown, NModal } from 'naive-ui';
 import { useUserStore } from '@/store/user';
 import { useThemeStore } from '@/store/theme';
+import { useBreadcrumbStore } from '@/store/breadcrumb'
 import { LogOutOutline as LogoutIcon, PersonOutline, SettingsOutline } from '@vicons/ionicons5'
 import { Moon, Sunny } from '@vicons/ionicons5'
 import EditChannel from '@/components/EditChannel.vue'
 
 const userStore = useUserStore()
+const breadcrumbStore = useBreadcrumbStore()
 const themeStore = useThemeStore()
 const router = useRouter()
 
@@ -88,6 +90,7 @@ const options = computed(() => [
 const handleSelect = (key: string) => {
     if (key === 'logout') {
         userStore.logout()
+        breadcrumbStore.resetCrumbs()
         router.push('/login')
     } else if (key === 'channel-settings') {
         showChannelSettings.value = true

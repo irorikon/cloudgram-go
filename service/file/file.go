@@ -32,10 +32,30 @@ func (f *FileService) GetFileList(parentID *uuid.UUID) ([]*model.File, error) {
 	// 	Order("name COLLATE \"zh_CN\".\"C\" ASC")
 
 	// 或者方案1b: 如果数据库不支持 zh_CN 排序规则，可以使用其他方法
-	query = query.Order("is_dir DESC").
+	// 尝试使用GBK排序
+	gbkQuery := query.Session(&gorm.Session{})
+	gbkQuery = gbkQuery.Order("is_dir DESC").
 		Order("convert_to(name, 'GBK') ASC")
 
-	err := query.Find(&files).Error
+	err := gbkQuery.Find(&files).Error
+
+	// 如果GBK转换失败，使用默认排序
+	if err != nil && strings.Contains(err.Error(), "has no equivalent in encoding \"GBK\"") {
+		// 重新构建查询
+		query = config.DB
+
+		if parentID == nil {
+			query = query.Where("parent_id IS NULL")
+		} else {
+			query = query.Where("parent_id = ?", parentID)
+		}
+
+		// 使用不依赖GBK的排序
+		query = query.Order("is_dir DESC").
+			Order("convert_to(name, 'UTF8') ASC")
+
+		err = query.Find(&files).Error
+	}
 	return files, err
 }
 
@@ -51,7 +71,28 @@ func (f *FileService) GetFoldersByParentId(parentID *uuid.UUID) ([]*model.File, 
 		query = query.Where("parent_id = ?", parentID)
 	}
 
-	err := query.Order("convert_to(name, 'GBK') ASC").Find(&folders).Error
+	// 尝试使用GBK排序
+	gbkQuery := query.Session(&gorm.Session{})
+	gbkQuery = gbkQuery.Order("convert_to(name, 'GBK') ASC")
+
+	err := gbkQuery.Find(&folders).Error
+
+	// 如果GBK转换失败，使用默认排序
+	if err != nil && strings.Contains(err.Error(), "has no equivalent in encoding \"GBK\"") {
+		// 重新构建查询
+		query = config.DB
+
+		if parentID == nil {
+			query = query.Where("parent_id IS NULL")
+		} else {
+			query = query.Where("parent_id = ?", parentID)
+		}
+
+		// 使用不依赖GBK的排序
+		query = query.Order("convert_to(name, 'UTF8') ASC")
+
+		err = query.Find(&folders).Error
+	}
 	return folders, err
 }
 

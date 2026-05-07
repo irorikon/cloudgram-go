@@ -81,3 +81,7 @@ export const useBreadcrumbStore = defineStore('breadcrumb', {
         }
     }
 })
+
+export const useBreadcrumbStoreWithOut = () => {
+  return useBreadcrumbStore();
+}

@@ -8,6 +8,7 @@ import type {
   AxiosRequestHeaders
 } from 'axios';
 import { useUserStoreWithOut } from '@/store/user';
+import { useBreadcrumbStoreWithOut } from '@/store/breadcrumb';
 import router from '@/router';
 
 // 定义请求配置接口
@@ -176,7 +177,9 @@ axiosInstance.interceptors.response.use(
 const handleAuthError = () => {
   try {
     const userStore = useUserStoreWithOut();
+    const breadcrumbStore = useBreadcrumbStoreWithOut();
     userStore.clearUser();
+    breadcrumbStore.resetCrumbs(); // 重置面包屑导航
     router.replace('/login');
   } catch (e) {
     console.warn('Failed to clear user store');
